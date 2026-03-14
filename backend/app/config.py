@@ -62,6 +62,10 @@ class Settings:
         "NSE_EQUITY_CSV_URL",
         "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv",
     )
+    nse_equity_fallback_csv_url: str = os.getenv(
+        "NSE_EQUITY_FALLBACK_CSV_URL",
+        "https://archives.nseindia.com/content/equities/EQUITY_L.csv",
+    )
     benchmark_symbol: str = os.getenv("BENCHMARK_SYMBOL", "^NSEI")
     benchmark_name: str = os.getenv("BENCHMARK_NAME", "NIFTY 50")
     cors_origins: tuple[str, ...] = _parse_cors_origins()

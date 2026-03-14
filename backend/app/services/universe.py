@@ -73,12 +73,14 @@ class NseEquityCsvUniverseProvider:
         cache_dir: Path,
         cache_ttl_minutes: int,
         source_url: str,
+        fallback_source_url: str,
         timeout_seconds: int,
     ) -> None:
         self.cache_path = cache_dir / "universe" / "nse_equities.csv"
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
         self.cache_ttl_seconds = cache_ttl_minutes * 60
         self.source_url = source_url
+        self.fallback_source_url = fallback_source_url
         self.timeout_seconds = timeout_seconds
 
     def load(self) -> list[StockListing]:
@@ -87,19 +89,7 @@ class NseEquityCsvUniverseProvider:
             return self._parse_csv(cached_text)
 
         try:
-            response = requests.get(
-                self.source_url,
-                timeout=self.timeout_seconds,
-                headers={
-                    "User-Agent": (
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                        "AppleWebKit/537.36 (KHTML, like Gecko) "
-                        "Chrome/124.0 Safari/537.36"
-                    )
-                },
-            )
-            response.raise_for_status()
-            csv_text = response.text
+            csv_text = self._download_csv_text()
             self.cache_path.write_text(csv_text, encoding="utf-8")
             return self._parse_csv(csv_text)
         except Exception as exc:
@@ -112,6 +102,34 @@ class NseEquityCsvUniverseProvider:
             raise UniverseProviderError(
                 f"Unable to load NSE equity universe from {self.source_url}: {exc}"
             ) from exc
+
+    def _download_csv_text(self) -> str:
+        errors: list[str] = []
+        for url in self._candidate_urls():
+            try:
+                response = requests.get(
+                    url,
+                    timeout=self.timeout_seconds,
+                    headers={
+                        "User-Agent": (
+                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                            "AppleWebKit/537.36 (KHTML, like Gecko) "
+                            "Chrome/124.0 Safari/537.36"
+                        )
+                    },
+                )
+                response.raise_for_status()
+                return response.text
+            except Exception as exc:
+                errors.append(f"{url}: {exc}")
+
+        raise UniverseProviderError("; ".join(errors))
+
+    def _candidate_urls(self) -> list[str]:
+        urls = [self.source_url]
+        if self.fallback_source_url and self.fallback_source_url not in urls:
+            urls.append(self.fallback_source_url)
+        return urls
 
     def _read_cache(self) -> str | None:
         if not self.cache_path.exists():
@@ -197,6 +215,7 @@ def _load_configured_universe() -> list[StockListing]:
         cache_dir=settings.cache_dir,
         cache_ttl_minutes=settings.universe_cache_ttl_minutes,
         source_url=settings.nse_equity_csv_url,
+        fallback_source_url=settings.nse_equity_fallback_csv_url,
         timeout_seconds=settings.nse_timeout_seconds,
     )
 
