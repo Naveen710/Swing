@@ -87,17 +87,8 @@ class ScannerService:
         listings: list[StockListing],
         request: ScanRequest,
     ) -> ScanResponse:
-        self._prefetch_scan_histories(listings, request.lookback_days)
         benchmark_context = self._load_benchmark_context(request.lookback_days)
-        with ThreadPoolExecutor(max_workers=settings.scan_workers) as executor:
-            results = list(
-                executor.map(
-                    lambda listing: self._scan_listing(listing, request, benchmark_context),
-                    listings,
-                )
-            )
-
-        candidates = [candidate for candidate in results if candidate is not None]
+        candidates = self._collect_candidates(listings, request, benchmark_context)
         candidates.sort(
             key=lambda candidate: (
                 candidate.ranking_score,
@@ -203,29 +194,35 @@ class ScannerService:
                 listing=listing,
                 lookback_days=request.lookback_days,
             )
+            enriched = apply_indicators(history)
+            relative_strength = build_relative_strength_snapshot(enriched, benchmark_context)
+            match = detect_best_pattern(enriched, relative_strength)
+            if match is None:
+                return None
+
+            candidate = self._build_trade_candidate(
+                listing=listing,
+                frame=enriched,
+                match=match,
+                investment_amount=request.investment_amount,
+                relative_strength=relative_strength,
+            )
+            if candidate.probability_score < request.min_probability:
+                return None
+            if candidate.risk_reward_ratio < request.min_risk_reward:
+                return None
+
+            return candidate
         except MarketDataError as exc:
             logger.warning("Skipping %s because history loading failed. %s", listing.symbol, exc)
             return None
-
-        enriched = apply_indicators(history)
-        relative_strength = build_relative_strength_snapshot(enriched, benchmark_context)
-        match = detect_best_pattern(enriched, relative_strength)
-        if match is None:
+        except Exception as exc:
+            logger.warning(
+                "Skipping %s because pattern evaluation failed. %s",
+                listing.symbol,
+                exc,
+            )
             return None
-
-        candidate = self._build_trade_candidate(
-            listing=listing,
-            frame=enriched,
-            match=match,
-            investment_amount=request.investment_amount,
-            relative_strength=relative_strength,
-        )
-        if candidate.probability_score < request.min_probability:
-            return None
-        if candidate.risk_reward_ratio < request.min_risk_reward:
-            return None
-
-        return candidate
 
     def _build_trade_candidate(
         self,
@@ -308,7 +305,7 @@ class ScannerService:
             history = self.market_data.get_history(candidate.listing, lookback_days)
             enriched = apply_indicators(history)
             backtest = backtest_pattern(enriched, candidate.match.pattern, benchmark_context)
-        except MarketDataError as exc:
+        except Exception as exc:
             logger.warning(
                 "Unable to load finalized history for %s while building scan output. %s",
                 candidate.listing.symbol,
@@ -399,19 +396,55 @@ class ScannerService:
             benchmark_frame=benchmark_frame,
         )
 
-    def _prefetch_scan_histories(
+    def _collect_candidates(
+        self,
+        listings: list[StockListing],
+        request: ScanRequest,
+        benchmark_context: RelativeStrengthContext | None,
+    ) -> list[TradeCandidate]:
+        if len(listings) < settings.async_scan_universe_threshold:
+            self._prefetch_histories(listings, request.lookback_days)
+            with ThreadPoolExecutor(max_workers=settings.scan_workers) as executor:
+                results = list(
+                    executor.map(
+                        lambda listing: self._scan_listing(listing, request, benchmark_context),
+                        listings,
+                    )
+                )
+            return [candidate for candidate in results if candidate is not None]
+
+        candidates: list[TradeCandidate] = []
+        scanned_symbols = 0
+        chunk_size = max(5, min(settings.yahoo_batch_size, 25))
+
+        for chunk in self._chunk_listings(listings, chunk_size):
+            self._prefetch_histories(chunk, request.lookback_days)
+            with ThreadPoolExecutor(
+                max_workers=max(1, min(settings.scan_workers, len(chunk)))
+            ) as executor:
+                results = list(
+                    executor.map(
+                        lambda listing: self._scan_listing(listing, request, benchmark_context),
+                        chunk,
+                    )
+                )
+
+            candidates.extend(candidate for candidate in results if candidate is not None)
+            scanned_symbols += len(chunk)
+            signal_store.update_progress(
+                scanned_symbols=scanned_symbols,
+                universe_size=len(listings),
+            )
+
+        return candidates
+
+    def _prefetch_histories(
         self,
         listings: list[StockListing],
         lookback_days: int,
     ) -> None:
-        benchmark_listing = get_benchmark_listing()
-        unique: dict[str, StockListing] = {
-            listing.symbol.upper(): listing for listing in listings
-        }
-        unique[benchmark_listing.symbol.upper()] = benchmark_listing
-
         try:
-            self.market_data.prefetch_histories(list(unique.values()), lookback_days)
+            self.market_data.prefetch_histories(listings, lookback_days)
         except AttributeError:
             logger.info("Market data provider does not support batch prefetch.")
         except Exception as exc:
@@ -461,6 +494,16 @@ class ScannerService:
         except Exception as exc:
             logger.exception("Background scan failed. %s", exc)
             signal_store.finish_scan()
+
+    def _chunk_listings(
+        self,
+        listings: list[StockListing],
+        chunk_size: int,
+    ) -> list[list[StockListing]]:
+        return [
+            listings[index : index + chunk_size]
+            for index in range(0, len(listings), chunk_size)
+        ]
 
 
 scanner_service = ScannerService()

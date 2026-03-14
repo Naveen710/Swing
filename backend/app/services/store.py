@@ -73,6 +73,12 @@ class SignalStore:
         with self._lock:
             self._scan_in_progress = False
 
+    def update_progress(self, *, scanned_symbols: int, universe_size: int | None = None) -> None:
+        with self._lock:
+            self._scanned_symbols = scanned_symbols
+            if universe_size is not None:
+                self._universe_size = universe_size
+
     def status(self) -> tuple[bool, datetime | None, int, int, int]:
         with self._lock:
             return (
