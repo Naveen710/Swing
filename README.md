@@ -36,6 +36,9 @@ The default setup now uses the official NSE equity list, so `/api/stocks` and
 the scanner can work from the full exchange universe instead of only the
 curated 20-stock basket.
 
+If you want to force the old curated basket again, set
+`FORCE_STATIC_UNIVERSE=1` together with `UNIVERSE_PROVIDER=static`.
+
 For serious or commercial deployment, treat `yfinance` as a prototyping source.
 It is excellent for development, but you should replace it with a licensed data
 provider before shipping a paid scanner.
@@ -72,6 +75,7 @@ Optional environment variables:
 ```bash
 $env:MARKET_DATA_PROVIDER="yahoo"
 $env:UNIVERSE_PROVIDER="nse"
+$env:FORCE_STATIC_UNIVERSE="0"
 $env:ALLOW_DEMO_FALLBACK="1"
 $env:CORS_ORIGINS="http://localhost:3000,http://127.0.0.1:3000"
 ```
