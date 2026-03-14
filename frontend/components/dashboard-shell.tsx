@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { startTransition, useEffect, useMemo, useState } from "react";
 
-import { getLatestSignals, getStocks, runScan } from "../lib/api";
+import { getLatestSignals, getScanStatus, getStocks, runScan } from "../lib/api";
 import { StockSummary, TradeSetup } from "../types";
 import { OpportunitiesTable } from "./opportunities-table";
 
@@ -14,6 +14,8 @@ export function DashboardShell() {
   const [stocks, setStocks] = useState<StockSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
+  const [scanInProgress, setScanInProgress] = useState(false);
+  const [scanNotice, setScanNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [minProbability, setMinProbability] = useState(0.6);
   const [minRiskReward, setMinRiskReward] = useState(2.0);
@@ -24,12 +26,21 @@ export function DashboardShell() {
   useEffect(() => {
     async function bootstrap() {
       try {
-        const [stockUniverse, latestSignals] = await Promise.all([
+        const [stockUniverse, latestSignals, status] = await Promise.all([
           getStocks(),
-          getLatestSignals()
+          getLatestSignals(),
+          getScanStatus()
         ]);
         setStocks(stockUniverse);
         setSignals(latestSignals);
+        setScanInProgress(status.scan_in_progress);
+        if (status.scan_in_progress) {
+          setScanNotice(
+            latestSignals.length
+              ? "Showing the latest saved opportunities while a fresh NSE-wide scan runs in the background."
+              : "Full NSE scan is already running in the background. Results will refresh automatically when it finishes."
+          );
+        }
       } catch (requestError) {
         setError("Unable to reach the backend API. Start the FastAPI server and retry.");
       } finally {
@@ -39,6 +50,32 @@ export function DashboardShell() {
 
     void bootstrap();
   }, []);
+
+  useEffect(() => {
+    if (!scanInProgress) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void getScanStatus()
+        .then((status) => {
+          if (!status.scan_in_progress) {
+            setScanInProgress(false);
+            setScanNotice("Fresh scan complete. Results have been updated.");
+            void getLatestSignals().then((latestSignals) => {
+              setSignals(latestSignals);
+            });
+          }
+        })
+        .catch(() => {
+          // Keep the current board visible and try again on the next poll.
+        });
+    }, 15000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [scanInProgress]);
 
   const sectors = useMemo(() => {
     const unique = new Set(stocks.map((stock) => stock.sector));
@@ -68,6 +105,18 @@ export function DashboardShell() {
       })
         .then((response) => {
           setSignals(response.results);
+          setScanInProgress(response.scan_in_progress);
+          if (response.scan_in_progress) {
+            setScanNotice(
+              response.refresh_started && response.results.length
+                ? "Showing the latest saved opportunities while a fresh NSE-wide scan runs in the background."
+                : response.refresh_started
+                  ? "Full NSE scan started in the background. This page will refresh automatically when it finishes."
+                  : "A full NSE scan is already running. This page will refresh automatically when it finishes."
+            );
+          } else {
+            setScanNotice(null);
+          }
         })
         .catch(() => {
           setError("Scan failed. Check backend logs or verify the API URL.");
@@ -139,9 +188,13 @@ export function DashboardShell() {
             <button
               className="primary-button"
               onClick={() => void handleScan()}
-              disabled={scanning}
+              disabled={scanning || scanInProgress}
             >
-              {scanning ? "Scanning..." : "Run scanner"}
+              {scanning
+                ? "Starting..."
+                : scanInProgress
+                  ? "Refreshing in background..."
+                  : "Run scanner"}
             </button>
           </div>
 
@@ -204,6 +257,7 @@ export function DashboardShell() {
             </label>
           </div>
 
+          {scanNotice ? <p className="muted">{scanNotice}</p> : null}
           {error ? <p className="error-text">{error}</p> : null}
         </article>
 

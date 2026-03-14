@@ -74,6 +74,17 @@ export interface ScanResponse {
   universe_size: number;
   scanned_symbols: number;
   results: TradeSetup[];
+  from_cache: boolean;
+  refresh_started: boolean;
+  scan_in_progress: boolean;
+}
+
+export interface ScanStatusResponse {
+  scan_in_progress: boolean;
+  latest_generated_at: string | null;
+  universe_size: number;
+  scanned_symbols: number;
+  latest_results_count: number;
 }
 
 export interface Candle {

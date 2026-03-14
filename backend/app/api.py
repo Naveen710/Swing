@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from app.config import settings
-from app.schemas import ScanRequest
+from app.schemas import ScanRequest, ScanStatusResponse
 from app.services.scanner import scanner_service
 
 router = APIRouter()
@@ -33,6 +33,11 @@ def latest_signals():
 @router.post("/scan")
 def run_scan(request: ScanRequest):
     return scanner_service.run_scan(request)
+
+
+@router.get("/scan/status")
+def get_scan_status() -> ScanStatusResponse:
+    return ScanStatusResponse(**scanner_service.scan_status())
 
 
 @router.get("/stock/{symbol}")

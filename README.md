@@ -43,6 +43,12 @@ Large scans are warmed in batched Yahoo Finance downloads before pattern
 evaluation starts, which cuts the first-pass scan time materially compared with
 fetching each symbol one by one.
 
+Full-universe scans can also switch to a background-refresh flow instead of
+holding the HTTP request open. When the universe size crosses
+`ASYNC_SCAN_UNIVERSE_THRESHOLD`, `POST /api/scan` returns immediately with the
+latest cached results and the frontend polls `GET /api/scan/status` until the
+fresh scan is done.
+
 For serious or commercial deployment, treat `yfinance` as a prototyping source.
 It is excellent for development, but you should replace it with a licensed data
 provider before shipping a paid scanner.
@@ -81,6 +87,7 @@ $env:MARKET_DATA_PROVIDER="yahoo"
 $env:UNIVERSE_PROVIDER="nse"
 $env:FORCE_STATIC_UNIVERSE="0"
 $env:YAHOO_BATCH_SIZE="100"
+$env:ASYNC_SCAN_UNIVERSE_THRESHOLD="500"
 $env:ALLOW_DEMO_FALLBACK="1"
 $env:CORS_ORIGINS="http://localhost:3000,http://127.0.0.1:3000"
 ```
@@ -123,6 +130,7 @@ Before using it on Render:
 - `GET /api/stocks`
 - `GET /api/signals`
 - `POST /api/scan`
+- `GET /api/scan/status`
 - `GET /api/stock/{symbol}`
 - `GET /api/backtest/{symbol}`
 

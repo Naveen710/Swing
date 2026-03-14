@@ -1,4 +1,10 @@
-import { ScanResponse, StockDetailResponse, StockSummary, TradeSetup } from "../types";
+import {
+  ScanResponse,
+  ScanStatusResponse,
+  StockDetailResponse,
+  StockSummary,
+  TradeSetup
+} from "../types";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api";
@@ -43,7 +49,10 @@ export function runScan(payload: ScanPayload): Promise<ScanResponse> {
   });
 }
 
+export function getScanStatus(): Promise<ScanStatusResponse> {
+  return request<ScanStatusResponse>("/scan/status");
+}
+
 export function getStockDetail(symbol: string): Promise<StockDetailResponse> {
   return request<StockDetailResponse>(`/stock/${encodeURIComponent(symbol)}`);
 }
-

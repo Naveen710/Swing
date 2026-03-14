@@ -110,6 +110,17 @@ class ScanResponse(BaseModel):
     universe_size: int
     scanned_symbols: int
     results: list[TradeSetup]
+    from_cache: bool = False
+    refresh_started: bool = False
+    scan_in_progress: bool = False
+
+
+class ScanStatusResponse(BaseModel):
+    scan_in_progress: bool
+    latest_generated_at: datetime | None
+    universe_size: int
+    scanned_symbols: int
+    latest_results_count: int
 
 
 class StockDetailResponse(BaseModel):

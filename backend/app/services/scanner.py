@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -64,6 +65,28 @@ class ScannerService:
                 results=[],
             )
 
+        if self._should_run_async(listings, request):
+            refresh_started = self._start_background_scan(request, listings)
+            generated_at, universe_size, scanned_symbols, cached_results = signal_store.snapshot(
+                request.max_results
+            )
+            return ScanResponse(
+                generated_at=generated_at or datetime.now(UTC),
+                universe_size=universe_size or len(listings),
+                scanned_symbols=scanned_symbols,
+                results=cached_results,
+                from_cache=bool(cached_results),
+                refresh_started=refresh_started,
+                scan_in_progress=True,
+            )
+
+        return self._execute_scan(listings, request)
+
+    def _execute_scan(
+        self,
+        listings: list[StockListing],
+        request: ScanRequest,
+    ) -> ScanResponse:
         self._prefetch_scan_histories(listings, request.lookback_days)
         benchmark_context = self._load_benchmark_context(request.lookback_days)
         with ThreadPoolExecutor(max_workers=settings.scan_workers) as executor:
@@ -86,10 +109,16 @@ class ScannerService:
             self._finalize_trade_setup(candidate, benchmark_context, request.lookback_days)
             for candidate in candidates[: request.max_results]
         ]
-        signal_store.replace(limited)
+        generated_at = datetime.now(UTC)
+        signal_store.replace(
+            limited,
+            generated_at=generated_at,
+            universe_size=len(listings),
+            scanned_symbols=len(listings),
+        )
 
         return ScanResponse(
-            generated_at=datetime.now(UTC),
+            generated_at=generated_at,
             universe_size=len(listings),
             scanned_symbols=len(listings),
             results=limited,
@@ -97,6 +126,22 @@ class ScannerService:
 
     def latest_signals(self) -> list[TradeSetup]:
         return signal_store.all()
+
+    def scan_status(self):
+        (
+            scan_in_progress,
+            generated_at,
+            universe_size,
+            scanned_symbols,
+            latest_results_count,
+        ) = signal_store.status()
+        return {
+            "scan_in_progress": scan_in_progress,
+            "latest_generated_at": generated_at,
+            "universe_size": universe_size,
+            "scanned_symbols": scanned_symbols,
+            "latest_results_count": latest_results_count,
+        }
 
     def get_stock_detail(self, symbol: str) -> StockDetailResponse | None:
         listings = load_universe(symbols=[symbol])
@@ -374,6 +419,48 @@ class ScannerService:
                 "Batch market-data prefetch failed. Continuing with on-demand loads. %s",
                 exc,
             )
+
+    def _should_run_async(
+        self,
+        listings: list[StockListing],
+        request: ScanRequest,
+    ) -> bool:
+        return (
+            len(listings) >= settings.async_scan_universe_threshold
+            and request.symbols is None
+            and request.sectors is None
+            and request.market_caps is None
+        )
+
+    def _start_background_scan(
+        self,
+        request: ScanRequest,
+        listings: list[StockListing],
+    ) -> bool:
+        if not signal_store.begin_scan(universe_size=len(listings)):
+            return False
+
+        thread = threading.Thread(
+            target=self._background_scan,
+            args=(request, listings),
+            daemon=True,
+        )
+        thread.start()
+        return True
+
+    def _background_scan(
+        self,
+        request: ScanRequest,
+        listings: list[StockListing],
+    ) -> None:
+        try:
+            if listings:
+                self._execute_scan(listings, request)
+            else:
+                signal_store.finish_scan()
+        except Exception as exc:
+            logger.exception("Background scan failed. %s", exc)
+            signal_store.finish_scan()
 
 
 scanner_service = ScannerService()

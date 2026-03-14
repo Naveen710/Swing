@@ -15,6 +15,10 @@ services:
         value: nse
       - key: ALLOW_DEMO_FALLBACK
         value: "0"
+      - key: YAHOO_BATCH_SIZE
+        value: "100"
+      - key: ASYNC_SCAN_UNIVERSE_THRESHOLD
+        value: "500"
       - key: BENCHMARK_SYMBOL
         value: ^NSEI
       - key: BENCHMARK_NAME

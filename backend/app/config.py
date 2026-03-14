@@ -42,6 +42,9 @@ class Settings:
     )
     api_prefix: str = "/api"
     scan_workers: int = int(os.getenv("SCAN_WORKERS", "8"))
+    async_scan_universe_threshold: int = int(
+        os.getenv("ASYNC_SCAN_UNIVERSE_THRESHOLD", "500")
+    )
     default_investment_amount: int = int(
         os.getenv("DEFAULT_INVESTMENT_AMOUNT", "100000")
     )
