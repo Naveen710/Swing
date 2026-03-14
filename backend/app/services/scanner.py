@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from app.config import settings
@@ -28,6 +29,24 @@ from app.services.universe import StockListing, get_benchmark_listing, load_univ
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class TradeCandidate:
+    listing: StockListing
+    match: PatternMatch
+    current_price: float
+    entry_price: float
+    stop_loss: float
+    target_price: float
+    risk_reward_ratio: float
+    probability_score: float
+    ranking_score: float
+    expected_profit_amount: float
+    expected_return_pct: float
+    indicators: IndicatorSnapshot
+    relative_strength: RelativeStrengthSnapshot
+    setup_state: str
+
+
 class ScannerService:
     def __init__(self) -> None:
         self.market_data = create_market_data_provider()
@@ -45,6 +64,7 @@ class ScannerService:
                 results=[],
             )
 
+        self._prefetch_scan_histories(listings, request.lookback_days)
         benchmark_context = self._load_benchmark_context(request.lookback_days)
         with ThreadPoolExecutor(max_workers=settings.scan_workers) as executor:
             results = list(
@@ -54,15 +74,18 @@ class ScannerService:
                 )
             )
 
-        setups = [setup for setup in results if setup is not None]
-        setups.sort(
-            key=lambda setup: (
-                setup.ranking_score,
-                setup.expected_profit_amount,
+        candidates = [candidate for candidate in results if candidate is not None]
+        candidates.sort(
+            key=lambda candidate: (
+                candidate.ranking_score,
+                candidate.expected_profit_amount,
             ),
             reverse=True,
         )
-        limited = setups[: request.max_results]
+        limited = [
+            self._finalize_trade_setup(candidate, benchmark_context, request.lookback_days)
+            for candidate in candidates[: request.max_results]
+        ]
         signal_store.replace(limited)
 
         return ScanResponse(
@@ -129,7 +152,7 @@ class ScannerService:
         listing: StockListing,
         request: ScanRequest,
         benchmark_context: RelativeStrengthContext | None,
-    ) -> TradeSetup | None:
+    ) -> TradeCandidate | None:
         try:
             history = self.market_data.get_history(
                 listing=listing,
@@ -145,30 +168,28 @@ class ScannerService:
         if match is None:
             return None
 
-        trade_setup = self._build_trade_setup(
+        candidate = self._build_trade_candidate(
             listing=listing,
             frame=enriched,
             match=match,
             investment_amount=request.investment_amount,
             relative_strength=relative_strength,
-            benchmark_context=benchmark_context,
         )
-        if trade_setup.probability_score < request.min_probability:
+        if candidate.probability_score < request.min_probability:
             return None
-        if trade_setup.risk_reward_ratio < request.min_risk_reward:
+        if candidate.risk_reward_ratio < request.min_risk_reward:
             return None
 
-        return trade_setup
+        return candidate
 
-    def _build_trade_setup(
+    def _build_trade_candidate(
         self,
         listing: StockListing,
         frame,
         match: PatternMatch,
         investment_amount: int,
         relative_strength: RelativeStrengthSnapshot,
-        benchmark_context: RelativeStrengthContext | None,
-    ) -> TradeSetup:
+    ) -> TradeCandidate:
         latest = frame.iloc[-1]
         current_price = float(latest["Close"])
         entry = round(max(current_price, match.trigger_price), 2)
@@ -210,30 +231,14 @@ class ScannerService:
             ),
         )
 
-        backtest = backtest_pattern(frame, match.pattern, benchmark_context)
         setup_state = (
             f" Entry trigger sits {(entry / current_price - 1) * 100:.1f}% above the current price."
             if entry > current_price * 1.001
             else " Setup is already near the trigger zone."
         )
-        rs_note = (
-            f" Relative strength vs {relative_strength.benchmark_name}: "
-            f"{relative_strength.excess_return_50d_pct:+.1f}% over 50 sessions "
-            f"and {relative_strength.excess_return_120d_pct:+.1f}% over 120 sessions."
-        )
-        reason = (
-            f"{match.explanation} Backtest win rate: {backtest.win_rate:.0%} across "
-            f"{backtest.total_trades} historical occurrences.{setup_state}{rs_note}"
-            if backtest.total_trades
-            else f"{match.explanation} Historical sample is still sparse.{setup_state}{rs_note}"
-        )
-
-        return TradeSetup(
-            symbol=listing.symbol,
-            company_name=listing.company_name,
-            sector=listing.sector,
-            market_cap_bucket=listing.market_cap_bucket,
-            pattern=match.pattern,
+        return TradeCandidate(
+            listing=listing,
+            match=match,
             current_price=round(current_price, 2),
             entry_price=round(entry, 2),
             stop_loss=stop_loss,
@@ -243,9 +248,69 @@ class ScannerService:
             ranking_score=ranking_score,
             expected_profit_amount=expected_profit_amount,
             expected_return_pct=expected_return_pct,
-            confidence_reason=reason,
             indicators=indicators,
             relative_strength=relative_strength,
+            setup_state=setup_state,
+        )
+
+    def _finalize_trade_setup(
+        self,
+        candidate: TradeCandidate,
+        benchmark_context: RelativeStrengthContext | None,
+        lookback_days: int,
+    ) -> TradeSetup:
+        try:
+            history = self.market_data.get_history(candidate.listing, lookback_days)
+            enriched = apply_indicators(history)
+            backtest = backtest_pattern(enriched, candidate.match.pattern, benchmark_context)
+        except MarketDataError as exc:
+            logger.warning(
+                "Unable to load finalized history for %s while building scan output. %s",
+                candidate.listing.symbol,
+                exc,
+            )
+            backtest = BacktestStats(
+                pattern=candidate.match.pattern,
+                total_trades=0,
+                win_rate=0.0,
+                average_return_pct=0.0,
+                max_drawdown_pct=0.0,
+                profit_factor=0.0,
+            )
+
+        rs_note = (
+            f" Relative strength vs {candidate.relative_strength.benchmark_name}: "
+            f"{candidate.relative_strength.excess_return_50d_pct:+.1f}% over 50 sessions "
+            f"and {candidate.relative_strength.excess_return_120d_pct:+.1f}% over 120 sessions."
+        )
+        reason = (
+            f"{candidate.match.explanation} Backtest win rate: {backtest.win_rate:.0%} across "
+            f"{backtest.total_trades} historical occurrences.{candidate.setup_state}{rs_note}"
+            if backtest.total_trades
+            else (
+                f"{candidate.match.explanation} Historical sample is still sparse."
+                f"{candidate.setup_state}{rs_note}"
+            )
+        )
+
+        return TradeSetup(
+            symbol=candidate.listing.symbol,
+            company_name=candidate.listing.company_name,
+            sector=candidate.listing.sector,
+            market_cap_bucket=candidate.listing.market_cap_bucket,
+            pattern=candidate.match.pattern,
+            current_price=candidate.current_price,
+            entry_price=candidate.entry_price,
+            stop_loss=candidate.stop_loss,
+            target_price=candidate.target_price,
+            risk_reward_ratio=candidate.risk_reward_ratio,
+            probability_score=candidate.probability_score,
+            ranking_score=candidate.ranking_score,
+            expected_profit_amount=candidate.expected_profit_amount,
+            expected_return_pct=candidate.expected_return_pct,
+            confidence_reason=reason,
+            indicators=candidate.indicators,
+            relative_strength=candidate.relative_strength,
             backtest=backtest,
         )
 
@@ -288,6 +353,27 @@ class ScannerService:
             benchmark_listing=benchmark_listing,
             benchmark_frame=benchmark_frame,
         )
+
+    def _prefetch_scan_histories(
+        self,
+        listings: list[StockListing],
+        lookback_days: int,
+    ) -> None:
+        benchmark_listing = get_benchmark_listing()
+        unique: dict[str, StockListing] = {
+            listing.symbol.upper(): listing for listing in listings
+        }
+        unique[benchmark_listing.symbol.upper()] = benchmark_listing
+
+        try:
+            self.market_data.prefetch_histories(list(unique.values()), lookback_days)
+        except AttributeError:
+            logger.info("Market data provider does not support batch prefetch.")
+        except Exception as exc:
+            logger.warning(
+                "Batch market-data prefetch failed. Continuing with on-demand loads. %s",
+                exc,
+            )
 
 
 scanner_service = ScannerService()
