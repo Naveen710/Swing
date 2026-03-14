@@ -1,0 +1,49 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      SCAN_WORKERS: 8
+      DEFAULT_INVESTMENT_AMOUNT: 100000
+      DEFAULT_SCAN_LOOKBACK: 300
+      MARKET_DATA_PROVIDER: auto
+      UNIVERSE_PROVIDER: static
+      ALLOW_DEMO_FALLBACK: 1
+      DATA_CACHE_DIR: .cache
+      MARKET_DATA_CACHE_TTL_MINUTES: 240
+      UNIVERSE_CACHE_TTL_MINUTES: 1440
+      YAHOO_TIMEOUT_SECONDS: 20
+      NSE_TIMEOUT_SECONDS: 20
+      BENCHMARK_SYMBOL: ^NSEI
+      BENCHMARK_NAME: NIFTY 50
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api
+    depends_on:
+      - backend
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: swing_scanner
+      POSTGRES_USER: scanner
+      POSTGRES_PASSWORD: scanner
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  pgdata:

@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: nse-ai-scanner-api
+    env: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.2
+      - key: MARKET_DATA_PROVIDER
+        value: yahoo
+      - key: UNIVERSE_PROVIDER
+        value: static
+      - key: ALLOW_DEMO_FALLBACK
+        value: "0"
+      - key: BENCHMARK_SYMBOL
+        value: ^NSEI
+      - key: BENCHMARK_NAME
+        value: NIFTY 50
+      - key: CORS_ORIGINS
+        value: https://nse-ai-scanner-web.onrender.com,http://localhost:3000
+
+  - type: web
+    name: nse-ai-scanner-web
+    env: node
+    plan: free
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm run start -- --hostname 0.0.0.0 --port $PORT
+    envVars:
+      - key: NODE_VERSION
+        value: 22.14.0
+      - key: NEXT_PUBLIC_API_BASE_URL
+        value: https://nse-ai-scanner-api.onrender.com/api
