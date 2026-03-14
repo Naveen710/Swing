@@ -12,7 +12,7 @@ services:
       - key: MARKET_DATA_PROVIDER
         value: yahoo
       - key: UNIVERSE_PROVIDER
-        value: static
+        value: nse
       - key: ALLOW_DEMO_FALLBACK
         value: "0"
       - key: BENCHMARK_SYMBOL

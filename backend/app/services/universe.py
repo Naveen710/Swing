@@ -126,21 +126,28 @@ class NseEquityCsvUniverseProvider:
         reader = csv.DictReader(io.StringIO(csv_text))
         listings: list[StockListing] = []
 
+        seen_symbols: set[str] = set()
+
         for row in reader:
             raw_symbol = (row.get("SYMBOL") or "").strip().upper()
             company_name = (row.get("NAME OF COMPANY") or raw_symbol).strip()
             series = (row.get(" SERIES") or row.get("SERIES") or "").strip().upper()
 
-            if not raw_symbol or (series and series != "EQ"):
+            if not raw_symbol:
                 continue
 
             symbol = f"{raw_symbol}.NS"
+            if symbol in seen_symbols:
+                continue
+            seen_symbols.add(symbol)
+
             metadata = STATIC_METADATA.get(symbol.upper())
+            normalized_sector = metadata.sector if metadata else _guess_sector(company_name)
             listings.append(
                 StockListing(
                     symbol=symbol,
                     company_name=company_name,
-                    sector=metadata.sector if metadata else "Unknown",
+                    sector=normalized_sector,
                     market_cap_bucket=(
                         metadata.market_cap_bucket if metadata else MarketCapBucket.SMALL
                     ),
@@ -214,3 +221,26 @@ def _normalize_symbol(symbol: str) -> str:
     if normalized.endswith(".NS"):
         return normalized
     return f"{normalized}.NS"
+
+
+def _guess_sector(company_name: str) -> str:
+    normalized = company_name.lower()
+    if any(token in normalized for token in ("bank", "finance", "capital", "investment")):
+        return "Financials"
+    if any(token in normalized for token in ("pharma", "health", "hospital", "life science")):
+        return "Healthcare"
+    if any(token in normalized for token in ("software", "tech", "systems", "infotech")):
+        return "IT"
+    if any(token in normalized for token in ("power", "energy", "gas", "oil")):
+        return "Energy"
+    if any(token in normalized for token in ("telecom", "communications", "airtel")):
+        return "Telecom"
+    if any(token in normalized for token in ("cement", "steel", "paint", "chemical")):
+        return "Materials"
+    if any(token in normalized for token in ("motors", "auto", "tyre")):
+        return "Automotive"
+    if any(token in normalized for token in ("retail", "consumer", "foods", "jewellers")):
+        return "Consumer"
+    if any(token in normalized for token in ("infra", "construction", "engineer", "shipping", "ports")):
+        return "Industrials"
+    return "Unknown"

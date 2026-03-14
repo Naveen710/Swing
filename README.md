@@ -32,8 +32,9 @@ For the stock universe:
 - `UNIVERSE_PROVIDER=nse`: load the official NSE equity list from the exchange CSV
 - `UNIVERSE_PROVIDER=auto`: try the official NSE CSV, then fall back to the built-in basket
 
-The default setup keeps the curated universe for speed, while using live Yahoo
-Finance candles whenever network access is available.
+The default setup now uses the official NSE equity list, so `/api/stocks` and
+the scanner can work from the full exchange universe instead of only the
+curated 20-stock basket.
 
 For serious or commercial deployment, treat `yfinance` as a prototyping source.
 It is excellent for development, but you should replace it with a licensed data
@@ -96,8 +97,8 @@ docker compose up --build
 The repo now includes [render.yaml](/C:/Users/prave/OneDrive/Documents/Playground/render.yaml)
 with a two-service blueprint:
 
-- `nse-ai-scanner-api`: FastAPI backend
-- `nse-ai-scanner-web`: Next.js frontend
+- `naveen710-swing-api`: FastAPI backend
+- `naveen710-swing-web`: Next.js frontend
 
 Before using it on Render:
 
@@ -138,9 +139,9 @@ Before using it on Render:
 ## Universe metadata caveat
 
 When `UNIVERSE_PROVIDER=nse`, symbol and company-name coverage come from the
-official exchange CSV, but sector and market-cap values are only fully known for
-the built-in curated basket. Unknown live symbols currently default to
-`sector=Unknown` and `small_cap`.
+official exchange CSV. Sector and market-cap values are still most accurate for
+the built-in curated basket, while the broader NSE list uses lightweight sector
+guessing and defaults unknown names to `small_cap`.
 
 ## What to build next
 

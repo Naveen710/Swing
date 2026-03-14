@@ -36,7 +36,7 @@ class Settings:
     )
     default_scan_lookback: int = int(os.getenv("DEFAULT_SCAN_LOOKBACK", "300"))
     market_data_provider: str = os.getenv("MARKET_DATA_PROVIDER", "auto").lower()
-    universe_provider: str = os.getenv("UNIVERSE_PROVIDER", "static").lower()
+    universe_provider: str = os.getenv("UNIVERSE_PROVIDER", "nse").lower()
     allow_demo_fallback: bool = os.getenv("ALLOW_DEMO_FALLBACK", "1") == "1"
     cache_dir: Path = Path(os.getenv("DATA_CACHE_DIR", ".cache"))
     market_data_cache_ttl_minutes: int = int(
