@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: nse-ai-scanner-api
+    name: naveen710-swing-api
     env: python
     plan: free
     rootDir: backend
@@ -20,10 +20,10 @@ services:
       - key: BENCHMARK_NAME
         value: NIFTY 50
       - key: CORS_ORIGINS
-        value: https://nse-ai-scanner-web.onrender.com,http://localhost:3000
+        value: https://naveen710-swing-web.onrender.com,http://localhost:3000
 
   - type: web
-    name: nse-ai-scanner-web
+    name: naveen710-swing-web
     env: node
     plan: free
     rootDir: frontend
@@ -33,4 +33,4 @@ services:
       - key: NODE_VERSION
         value: 22.14.0
       - key: NEXT_PUBLIC_API_BASE_URL
-        value: https://nse-ai-scanner-api.onrender.com/api
+        value: https://naveen710-swing-api.onrender.com/api
