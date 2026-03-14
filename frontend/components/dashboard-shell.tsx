@@ -56,24 +56,49 @@ export function DashboardShell() {
       return;
     }
 
-    const intervalId = window.setInterval(() => {
-      void getScanStatus()
-        .then((status) => {
-          if (!status.scan_in_progress) {
-            setScanInProgress(false);
-            setScanNotice("Fresh scan complete. Results have been updated.");
-            void getLatestSignals().then((latestSignals) => {
-              setSignals(latestSignals);
-            });
+    let cancelled = false;
+    let timeoutId: number | undefined;
+
+    const pollStatus = async () => {
+      try {
+        const status = await getScanStatus();
+        if (cancelled) {
+          return;
+        }
+
+        if (!status.scan_in_progress) {
+          setScanInProgress(false);
+          setScanNotice("Fresh scan complete. Results have been updated.");
+          const latestSignals = await getLatestSignals();
+          if (!cancelled) {
+            setSignals(latestSignals);
           }
-        })
-        .catch(() => {
-          // Keep the current board visible and try again on the next poll.
-        });
-    }, 15000);
+          return;
+        }
+
+        setScanNotice(
+          `Scanning ${status.scanned_symbols} of ${status.universe_size} NSE stocks. The board will refresh automatically when the run finishes.`
+        );
+      } catch {
+        if (cancelled) {
+          return;
+        }
+      }
+
+      timeoutId = window.setTimeout(() => {
+        void pollStatus();
+      }, 3000);
+    };
+
+    timeoutId = window.setTimeout(() => {
+      void pollStatus();
+    }, 3000);
 
     return () => {
-      window.clearInterval(intervalId);
+      cancelled = true;
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
     };
   }, [scanInProgress]);
 

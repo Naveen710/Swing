@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from app.config import settings
@@ -48,9 +48,20 @@ class TradeCandidate:
     setup_state: str
 
 
+@dataclass
+class ActiveScanState:
+    request: ScanRequest
+    listings: list[StockListing]
+    benchmark_context: RelativeStrengthContext | None = None
+    candidates: list[TradeCandidate] = field(default_factory=list)
+    cursor: int = 0
+
+
 class ScannerService:
     def __init__(self) -> None:
         self.market_data = create_market_data_provider()
+        self._active_scan: ActiveScanState | None = None
+        self._active_scan_lock = threading.Lock()
 
     def list_stocks(self) -> list[dict[str, str]]:
         return [listing.to_summary().model_dump() for listing in load_universe()]
@@ -66,7 +77,7 @@ class ScannerService:
             )
 
         if self._should_run_async(listings, request):
-            refresh_started = self._start_background_scan(request, listings)
+            refresh_started = self._start_incremental_scan(request, listings)
             generated_at, universe_size, scanned_symbols, cached_results = signal_store.snapshot(
                 request.max_results
             )
@@ -119,6 +130,7 @@ class ScannerService:
         return signal_store.all()
 
     def scan_status(self):
+        self._advance_incremental_scan()
         (
             scan_in_progress,
             generated_at,
@@ -402,41 +414,25 @@ class ScannerService:
         request: ScanRequest,
         benchmark_context: RelativeStrengthContext | None,
     ) -> list[TradeCandidate]:
-        if len(listings) < settings.async_scan_universe_threshold:
-            self._prefetch_histories(listings, request.lookback_days)
-            with ThreadPoolExecutor(max_workers=settings.scan_workers) as executor:
-                results = list(
-                    executor.map(
-                        lambda listing: self._scan_listing(listing, request, benchmark_context),
-                        listings,
-                    )
+        return self._scan_chunk(listings, request, benchmark_context)
+
+    def _scan_chunk(
+        self,
+        listings: list[StockListing],
+        request: ScanRequest,
+        benchmark_context: RelativeStrengthContext | None,
+    ) -> list[TradeCandidate]:
+        self._prefetch_histories(listings, request.lookback_days)
+        with ThreadPoolExecutor(
+            max_workers=max(1, min(settings.scan_workers, len(listings)))
+        ) as executor:
+            results = list(
+                executor.map(
+                    lambda listing: self._scan_listing(listing, request, benchmark_context),
+                    listings,
                 )
-            return [candidate for candidate in results if candidate is not None]
-
-        candidates: list[TradeCandidate] = []
-        scanned_symbols = 0
-        chunk_size = max(5, min(settings.yahoo_batch_size, 25))
-
-        for chunk in self._chunk_listings(listings, chunk_size):
-            self._prefetch_histories(chunk, request.lookback_days)
-            with ThreadPoolExecutor(
-                max_workers=max(1, min(settings.scan_workers, len(chunk)))
-            ) as executor:
-                results = list(
-                    executor.map(
-                        lambda listing: self._scan_listing(listing, request, benchmark_context),
-                        chunk,
-                    )
-                )
-
-            candidates.extend(candidate for candidate in results if candidate is not None)
-            scanned_symbols += len(chunk)
-            signal_store.update_progress(
-                scanned_symbols=scanned_symbols,
-                universe_size=len(listings),
             )
-
-        return candidates
+        return [candidate for candidate in results if candidate is not None]
 
     def _prefetch_histories(
         self,
@@ -465,45 +461,84 @@ class ScannerService:
             and request.market_caps is None
         )
 
-    def _start_background_scan(
+    def _start_incremental_scan(
         self,
         request: ScanRequest,
         listings: list[StockListing],
     ) -> bool:
-        if not signal_store.begin_scan(universe_size=len(listings)):
-            return False
+        with self._active_scan_lock:
+            if self._active_scan is not None:
+                return False
+            if not signal_store.begin_scan(universe_size=len(listings)):
+                return False
 
-        thread = threading.Thread(
-            target=self._background_scan,
-            args=(request, listings),
-            daemon=True,
-        )
-        thread.start()
-        return True
+            self._active_scan = ActiveScanState(
+                request=request,
+                listings=listings,
+            )
+            return True
 
-    def _background_scan(
-        self,
-        request: ScanRequest,
-        listings: list[StockListing],
-    ) -> None:
-        try:
-            if listings:
-                self._execute_scan(listings, request)
-            else:
+    def _advance_incremental_scan(self) -> None:
+        with self._active_scan_lock:
+            state = self._active_scan
+            if state is None:
+                return
+
+            try:
+                if state.benchmark_context is None:
+                    state.benchmark_context = self._load_benchmark_context(
+                        state.request.lookback_days
+                    )
+
+                chunk_size = max(5, min(settings.yahoo_batch_size, 25))
+                chunk = state.listings[state.cursor : state.cursor + chunk_size]
+                if not chunk:
+                    self._finish_incremental_scan(state)
+                    self._active_scan = None
+                    return
+
+                results = self._scan_chunk(
+                    chunk,
+                    state.request,
+                    state.benchmark_context,
+                )
+                state.candidates.extend(results)
+                state.cursor += len(chunk)
+                signal_store.update_progress(
+                    scanned_symbols=state.cursor,
+                    universe_size=len(state.listings),
+                )
+
+                if state.cursor >= len(state.listings):
+                    self._finish_incremental_scan(state)
+                    self._active_scan = None
+            except Exception as exc:
+                logger.exception("Incremental scan step failed. %s", exc)
+                self._active_scan = None
                 signal_store.finish_scan()
-        except Exception as exc:
-            logger.exception("Background scan failed. %s", exc)
-            signal_store.finish_scan()
 
-    def _chunk_listings(
-        self,
-        listings: list[StockListing],
-        chunk_size: int,
-    ) -> list[list[StockListing]]:
-        return [
-            listings[index : index + chunk_size]
-            for index in range(0, len(listings), chunk_size)
+    def _finish_incremental_scan(self, state: ActiveScanState) -> None:
+        state.candidates.sort(
+            key=lambda candidate: (
+                candidate.ranking_score,
+                candidate.expected_profit_amount,
+            ),
+            reverse=True,
+        )
+        limited = [
+            self._finalize_trade_setup(
+                candidate,
+                state.benchmark_context,
+                state.request.lookback_days,
+            )
+            for candidate in state.candidates[: state.request.max_results]
         ]
-
+        generated_at = datetime.now(UTC)
+        signal_store.replace(
+            limited,
+            generated_at=generated_at,
+            universe_size=len(state.listings),
+            scanned_symbols=len(state.listings),
+        )
 
 scanner_service = ScannerService()
