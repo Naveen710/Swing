@@ -11,12 +11,16 @@ services:
         value: 3.13.2
       - key: MARKET_DATA_PROVIDER
         value: yahoo
+      - key: SCAN_WORKERS
+        value: "4"
       - key: UNIVERSE_PROVIDER
         value: nse
       - key: ALLOW_DEMO_FALLBACK
         value: "0"
       - key: YAHOO_BATCH_SIZE
-        value: "100"
+        value: "25"
+      - key: MARKET_DATA_MEMORY_CACHE_SYMBOLS
+        value: "24"
       - key: ASYNC_SCAN_UNIVERSE_THRESHOLD
         value: "500"
       - key: BENCHMARK_SYMBOL

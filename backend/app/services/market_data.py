@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 import importlib
 import logging
 import re
@@ -48,8 +49,9 @@ class CachedYahooFinanceMarketDataProvider:
         self.cache_ttl_seconds = cache_ttl_minutes * 60
         self.timeout_seconds = timeout_seconds
         self.batch_size = max(5, settings.yahoo_batch_size)
+        self.memory_cache_symbols = max(0, settings.market_data_memory_cache_symbols)
         self._download_lock = threading.Lock()
-        self._memory_cache: dict[str, pd.DataFrame] = {}
+        self._memory_cache: OrderedDict[str, pd.DataFrame] = OrderedDict()
         self._memory_cache_lock = threading.Lock()
 
     def get_history(self, listing: StockListing, lookback_days: int = 320) -> pd.DataFrame:
@@ -195,15 +197,27 @@ class CachedYahooFinanceMarketDataProvider:
         symbol: str,
         required_rows: int,
     ) -> pd.DataFrame | None:
+        if self.memory_cache_symbols <= 0:
+            return None
+
         with self._memory_cache_lock:
             frame = self._memory_cache.get(symbol.upper())
+            if frame is not None:
+                self._memory_cache.move_to_end(symbol.upper())
         if frame is None or len(frame) < required_rows:
             return None
         return frame
 
     def _save_memory_cache(self, symbol: str, frame: pd.DataFrame) -> None:
+        if self.memory_cache_symbols <= 0:
+            return
+
         with self._memory_cache_lock:
-            self._memory_cache[symbol.upper()] = frame
+            key = symbol.upper()
+            self._memory_cache[key] = frame
+            self._memory_cache.move_to_end(key)
+            while len(self._memory_cache) > self.memory_cache_symbols:
+                self._memory_cache.popitem(last=False)
 
     def _is_cache_fresh(self, cache_path: Path) -> bool:
         age_seconds = time.time() - cache_path.stat().st_mtime

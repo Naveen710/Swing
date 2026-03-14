@@ -57,6 +57,9 @@ class Settings:
         os.getenv("MARKET_DATA_CACHE_TTL_MINUTES", "240")
     )
     yahoo_batch_size: int = int(os.getenv("YAHOO_BATCH_SIZE", "100"))
+    market_data_memory_cache_symbols: int = int(
+        os.getenv("MARKET_DATA_MEMORY_CACHE_SYMBOLS", "64")
+    )
     universe_cache_ttl_minutes: int = int(
         os.getenv("UNIVERSE_CACHE_TTL_MINUTES", "1440")
     )

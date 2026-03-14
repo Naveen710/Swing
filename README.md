@@ -49,6 +49,10 @@ holding the HTTP request open. When the universe size crosses
 latest cached results and the frontend polls `GET /api/scan/status` until the
 fresh scan is done.
 
+To keep small hosted instances stable, the Yahoo provider also caps its
+in-process dataframe cache with `MARKET_DATA_MEMORY_CACHE_SYMBOLS` instead of
+retaining the whole exchange universe in RAM.
+
 For serious or commercial deployment, treat `yfinance` as a prototyping source.
 It is excellent for development, but you should replace it with a licensed data
 provider before shipping a paid scanner.
@@ -87,6 +91,7 @@ $env:MARKET_DATA_PROVIDER="yahoo"
 $env:UNIVERSE_PROVIDER="nse"
 $env:FORCE_STATIC_UNIVERSE="0"
 $env:YAHOO_BATCH_SIZE="100"
+$env:MARKET_DATA_MEMORY_CACHE_SYMBOLS="64"
 $env:ASYNC_SCAN_UNIVERSE_THRESHOLD="500"
 $env:ALLOW_DEMO_FALLBACK="1"
 $env:CORS_ORIGINS="http://localhost:3000,http://127.0.0.1:3000"
