@@ -77,6 +77,9 @@ class NseEquityCsvUniverseProvider:
         timeout_seconds: int,
     ) -> None:
         self.cache_path = cache_dir / "universe" / "nse_equities.csv"
+        self.bundled_snapshot_path = (
+            Path(__file__).resolve().parents[2] / "data" / "nse_equities.csv"
+        )
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
         self.cache_ttl_seconds = cache_ttl_minutes * 60
         self.source_url = source_url
@@ -85,6 +88,7 @@ class NseEquityCsvUniverseProvider:
 
     def load(self) -> list[StockListing]:
         cached_text = self._read_cache()
+        bundled_text = self._read_bundled_snapshot()
         if cached_text is not None and self._is_cache_fresh():
             return self._parse_csv(cached_text)
 
@@ -99,6 +103,12 @@ class NseEquityCsvUniverseProvider:
                     exc,
                 )
                 return self._parse_csv(cached_text)
+            if bundled_text is not None:
+                logger.warning(
+                    "Unable to refresh NSE universe CSV. Using bundled snapshot instead. %s",
+                    exc,
+                )
+                return self._parse_csv(bundled_text)
             raise UniverseProviderError(
                 f"Unable to load NSE equity universe from {self.source_url}: {exc}"
             ) from exc
@@ -135,6 +145,11 @@ class NseEquityCsvUniverseProvider:
         if not self.cache_path.exists():
             return None
         return self.cache_path.read_text(encoding="utf-8")
+
+    def _read_bundled_snapshot(self) -> str | None:
+        if not self.bundled_snapshot_path.exists():
+            return None
+        return self.bundled_snapshot_path.read_text(encoding="utf-8")
 
     def _is_cache_fresh(self) -> bool:
         age_seconds = time.time() - self.cache_path.stat().st_mtime
