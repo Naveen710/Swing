@@ -29,12 +29,17 @@ The backend now supports three runtime modes:
 For the stock universe:
 
 - `UNIVERSE_PROVIDER=static`: use the curated built-in NSE basket
+- `UNIVERSE_PROVIDER=bundled_csv`: use the bundled `backend/data/nse_equities.csv` snapshot
 - `UNIVERSE_PROVIDER=nse`: load the official NSE equity list from the exchange CSV
 - `UNIVERSE_PROVIDER=auto`: try the official NSE CSV, then fall back to the built-in basket
 
 The default setup now uses the official NSE equity list, so `/api/stocks` and
 the scanner can work from the full exchange universe instead of only the
 curated 20-stock basket.
+
+If you want to control the scan universe manually, comment rows in
+`backend/data/nse_equities.csv` and set `UNIVERSE_PROVIDER=bundled_csv`. Commented
+rows that start with `#` are ignored by the loader.
 
 If you want to force the old curated basket again, set
 `FORCE_STATIC_UNIVERSE=1` together with `UNIVERSE_PROVIDER=static`.
@@ -88,7 +93,7 @@ Optional environment variables:
 
 ```bash
 $env:MARKET_DATA_PROVIDER="yahoo"
-$env:UNIVERSE_PROVIDER="nse"
+$env:UNIVERSE_PROVIDER="bundled_csv"
 $env:FORCE_STATIC_UNIVERSE="0"
 $env:YAHOO_BATCH_SIZE="100"
 $env:MARKET_DATA_MEMORY_CACHE_SYMBOLS="64"

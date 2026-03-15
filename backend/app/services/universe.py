@@ -113,6 +113,14 @@ class NseEquityCsvUniverseProvider:
                 f"Unable to load NSE equity universe from {self.source_url}: {exc}"
             ) from exc
 
+    def load_bundled(self) -> list[StockListing]:
+        bundled_text = self._read_bundled_snapshot()
+        if bundled_text is None:
+            raise UniverseProviderError(
+                f"Bundled NSE universe snapshot not found at {self.bundled_snapshot_path}"
+            )
+        return self._parse_csv(bundled_text)
+
     def _download_csv_text(self) -> str:
         errors: list[str] = []
         for url in self._candidate_urls():
@@ -156,7 +164,12 @@ class NseEquityCsvUniverseProvider:
         return age_seconds <= self.cache_ttl_seconds
 
     def _parse_csv(self, csv_text: str) -> list[StockListing]:
-        reader = csv.DictReader(io.StringIO(csv_text))
+        active_lines = [
+            line
+            for line in csv_text.splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        reader = csv.DictReader(io.StringIO("\n".join(active_lines)))
         listings: list[StockListing] = []
 
         seen_symbols: set[str] = set()
@@ -233,6 +246,9 @@ def _load_configured_universe() -> list[StockListing]:
         fallback_source_url=settings.nse_equity_fallback_csv_url,
         timeout_seconds=settings.nse_timeout_seconds,
     )
+
+    if provider_name == "bundled_csv":
+        return live_provider.load_bundled()
 
     if provider_name == "nse":
         return live_provider.load()
