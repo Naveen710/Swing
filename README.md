@@ -44,6 +44,10 @@ rows that start with `#` are ignored by the loader.
 If you want to force the old curated basket again, set
 `FORCE_STATIC_UNIVERSE=1` together with `UNIVERSE_PROVIDER=static`.
 
+On Render, the app now prefers `bundled_csv` over live `nse` by default so the
+committed CSV controls the scan universe. Set `FORCE_LIVE_NSE=1` only if you
+want to bypass the bundled file and fetch the full exchange list again.
+
 Large scans are warmed in batched Yahoo Finance downloads before pattern
 evaluation starts, which cuts the first-pass scan time materially compared with
 fetching each symbol one by one.
@@ -95,6 +99,7 @@ Optional environment variables:
 $env:MARKET_DATA_PROVIDER="yahoo"
 $env:UNIVERSE_PROVIDER="bundled_csv"
 $env:FORCE_STATIC_UNIVERSE="0"
+$env:FORCE_LIVE_NSE="0"
 $env:YAHOO_BATCH_SIZE="100"
 $env:MARKET_DATA_MEMORY_CACHE_SYMBOLS="64"
 $env:ASYNC_SCAN_UNIVERSE_THRESHOLD="500"

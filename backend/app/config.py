@@ -29,7 +29,13 @@ def _resolve_universe_provider() -> str:
         and os.getenv("RENDER") == "true"
         and os.getenv("FORCE_STATIC_UNIVERSE", "0") != "1"
     ):
-        return "nse"
+        return "bundled_csv"
+    if (
+        provider == "nse"
+        and os.getenv("RENDER") == "true"
+        and os.getenv("FORCE_LIVE_NSE", "0") != "1"
+    ):
+        return "bundled_csv"
     return provider
 
 
