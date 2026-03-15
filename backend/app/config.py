@@ -42,6 +42,7 @@ def _resolve_universe_provider() -> str:
 @dataclass(frozen=True)
 class Settings:
     app_name: str = "NSE AI Swing Scanner"
+    app_release: str = os.getenv("APP_RELEASE", "dev")
     app_description: str = (
         "Offline-friendly MVP for scanning NSE swing setups using rule-based "
         "patterns, indicator confirmation, and lightweight backtesting."

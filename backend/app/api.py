@@ -13,6 +13,7 @@ router = APIRouter()
 def healthcheck() -> dict[str, str | bool]:
     return {
         "status": "ok",
+        "app_release": settings.app_release,
         "market_data_provider": settings.market_data_provider,
         "universe_provider": settings.universe_provider,
         "allow_demo_fallback": settings.allow_demo_fallback,
