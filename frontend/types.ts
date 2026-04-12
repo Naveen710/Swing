@@ -47,6 +47,9 @@ export interface BacktestStats {
   average_return_pct: number;
   max_drawdown_pct: number;
   profit_factor: number;
+  target_hit_rate: number;
+  average_holding_sessions: number;
+  average_target_sessions: number | null;
 }
 
 export interface TradeSetup {
@@ -64,6 +67,8 @@ export interface TradeSetup {
   ranking_score: number;
   expected_profit_amount: number;
   expected_return_pct: number;
+  estimated_target_sessions: number;
+  estimated_target_date: string;
   confidence_reason: string;
   indicators: IndicatorSnapshot;
   relative_strength: RelativeStrengthSnapshot;

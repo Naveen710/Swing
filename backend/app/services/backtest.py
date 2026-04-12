@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 
 import pandas as pd
 
@@ -12,6 +13,13 @@ from app.services.relative_strength import (
 )
 
 
+@dataclass(frozen=True)
+class TradeResolution:
+    return_pct: float
+    holding_sessions: int
+    hit_target: bool
+
+
 def backtest_pattern(
     frame: pd.DataFrame,
     pattern: PatternType,
@@ -21,6 +29,9 @@ def backtest_pattern(
     wins = 0
     losses = 0
     returns: list[float] = []
+    holding_sessions: list[int] = []
+    target_sessions: list[int] = []
+    target_hits = 0
     gross_gain = 0.0
     gross_loss = 0.0
     max_drawdown = 0.0
@@ -54,16 +65,20 @@ def backtest_pattern(
 
         future = frame.iloc[index + 1 : index + 1 + horizon]
         outcome = _resolve_trade(future, entry, stop, target)
-        returns.append(outcome)
+        returns.append(outcome.return_pct)
+        holding_sessions.append(outcome.holding_sessions)
+        if outcome.hit_target:
+            target_hits += 1
+            target_sessions.append(outcome.holding_sessions)
 
-        if outcome > 0:
+        if outcome.return_pct > 0:
             wins += 1
-            gross_gain += outcome
+            gross_gain += outcome.return_pct
         else:
             losses += 1
-            gross_loss += abs(outcome)
+            gross_loss += abs(outcome.return_pct)
 
-        max_drawdown = min(max_drawdown, outcome)
+        max_drawdown = min(max_drawdown, outcome.return_pct)
 
     if total_trades == 0:
         return BacktestStats(
@@ -73,10 +88,19 @@ def backtest_pattern(
             average_return_pct=0.0,
             max_drawdown_pct=0.0,
             profit_factor=0.0,
+            target_hit_rate=0.0,
+            average_holding_sessions=0.0,
+            average_target_sessions=None,
         )
 
     profit_factor = gross_gain / gross_loss if gross_loss else gross_gain
     average_return = sum(returns) / len(returns)
+    average_holding = sum(holding_sessions) / len(holding_sessions)
+    average_target = (
+        round(sum(target_sessions) / len(target_sessions), 1)
+        if target_sessions
+        else None
+    )
 
     return BacktestStats(
         pattern=pattern,
@@ -85,6 +109,9 @@ def backtest_pattern(
         average_return_pct=round(average_return, 2),
         max_drawdown_pct=round(max_drawdown, 2),
         profit_factor=round(profit_factor, 2) if not math.isinf(profit_factor) else 99.0,
+        target_hit_rate=round(target_hits / total_trades, 3),
+        average_holding_sessions=round(average_holding, 1),
+        average_target_sessions=average_target,
     )
 
 
@@ -93,12 +120,24 @@ def _resolve_trade(
     entry: float,
     stop: float,
     target: float,
-) -> float:
-    for _, row in future.iterrows():
+) -> TradeResolution:
+    for index, (_, row) in enumerate(future.iterrows(), start=1):
         if row["Low"] <= stop:
-            return round(((stop / entry) - 1) * 100, 2)
+            return TradeResolution(
+                return_pct=round(((stop / entry) - 1) * 100, 2),
+                holding_sessions=index,
+                hit_target=False,
+            )
         if row["High"] >= target:
-            return round(((target / entry) - 1) * 100, 2)
+            return TradeResolution(
+                return_pct=round(((target / entry) - 1) * 100, 2),
+                holding_sessions=index,
+                hit_target=True,
+            )
 
     close = future.iloc[-1]["Close"]
-    return round(((close / entry) - 1) * 100, 2)
+    return TradeResolution(
+        return_pct=round(((close / entry) - 1) * 100, 2),
+        holding_sessions=len(future),
+        hit_target=False,
+    )

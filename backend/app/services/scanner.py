@@ -4,7 +4,7 @@ import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from app.config import settings
 from app.schemas import (
@@ -360,20 +360,40 @@ class ScannerService:
                 average_return_pct=0.0,
                 max_drawdown_pct=0.0,
                 profit_factor=0.0,
+                target_hit_rate=0.0,
+                average_holding_sessions=0.0,
+                average_target_sessions=None,
             )
+
+        if "enriched" in locals():
+            reference_date = enriched.index[-1].date()
+        else:
+            reference_date = datetime.now(UTC).date()
+
+        estimated_target_sessions = self._estimate_target_sessions(candidate, backtest)
+        estimated_target_date = self._project_target_date(
+            reference_date,
+            estimated_target_sessions,
+        )
 
         rs_note = (
             f" Relative strength vs {candidate.relative_strength.benchmark_name}: "
             f"{candidate.relative_strength.excess_return_50d_pct:+.1f}% over 50 sessions "
             f"and {candidate.relative_strength.excess_return_120d_pct:+.1f}% over 120 sessions."
         )
+        timing_note = (
+            f" Estimated target window: about {estimated_target_sessions} trading sessions, "
+            f"which points to {estimated_target_date.strftime('%d %b %Y')} if the setup follows "
+            f"its recent pace."
+        )
         reason = (
             f"{candidate.match.explanation} Backtest win rate: {backtest.win_rate:.0%} across "
-            f"{backtest.total_trades} historical occurrences.{candidate.setup_state}{rs_note}"
+            f"{backtest.total_trades} historical occurrences.{candidate.setup_state}"
+            f"{timing_note}{rs_note}"
             if backtest.total_trades
             else (
                 f"{candidate.match.explanation} Historical sample is still sparse."
-                f"{candidate.setup_state}{rs_note}"
+                f"{candidate.setup_state}{timing_note}{rs_note}"
             )
         )
 
@@ -392,6 +412,8 @@ class ScannerService:
             ranking_score=candidate.ranking_score,
             expected_profit_amount=candidate.expected_profit_amount,
             expected_return_pct=candidate.expected_return_pct,
+            estimated_target_sessions=estimated_target_sessions,
+            estimated_target_date=estimated_target_date,
             confidence_reason=reason,
             indicators=candidate.indicators,
             relative_strength=candidate.relative_strength,
@@ -490,6 +512,50 @@ class ScannerService:
             and request.sectors is None
             and request.market_caps is None
         )
+
+    def _estimate_target_sessions(
+        self,
+        candidate: TradeCandidate,
+        backtest: BacktestStats,
+    ) -> int:
+        per_session_move = max(
+            candidate.indicators.atr14 * 0.85,
+            candidate.entry_price * 0.008,
+        )
+        price_distance = max(
+            candidate.target_price - candidate.entry_price,
+            candidate.indicators.atr14,
+        )
+        atr_sessions = max(3, round(price_distance / per_session_move))
+        trigger_gap_sessions = 0
+        if candidate.entry_price > candidate.current_price * 1.001:
+            trigger_gap_sessions = max(
+                0,
+                round((candidate.entry_price - candidate.current_price) / per_session_move),
+            )
+
+        if backtest.average_target_sessions:
+            historical_component = backtest.average_target_sessions
+            estimated = round(historical_component * 0.7 + atr_sessions * 0.3)
+        elif backtest.average_holding_sessions:
+            estimated = round(backtest.average_holding_sessions * 0.55 + atr_sessions * 0.45)
+        else:
+            estimated = atr_sessions
+
+        return max(3, min(60, estimated + trigger_gap_sessions))
+
+    def _project_target_date(
+        self,
+        reference_date: date,
+        trading_sessions: int,
+    ) -> date:
+        projected = reference_date
+        remaining = max(1, trading_sessions)
+        while remaining > 0:
+            projected += timedelta(days=1)
+            if projected.weekday() < 5:
+                remaining -= 1
+        return projected
 
     def _start_incremental_scan(
         self,

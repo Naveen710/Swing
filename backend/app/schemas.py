@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -73,6 +73,9 @@ class BacktestStats(BaseModel):
     average_return_pct: float
     max_drawdown_pct: float
     profit_factor: float
+    target_hit_rate: float
+    average_holding_sessions: float
+    average_target_sessions: float | None
 
 
 class TradeSetup(BaseModel):
@@ -90,6 +93,8 @@ class TradeSetup(BaseModel):
     ranking_score: float
     expected_profit_amount: float
     expected_return_pct: float
+    estimated_target_sessions: int
+    estimated_target_date: date
     confidence_reason: str
     indicators: IndicatorSnapshot
     relative_strength: RelativeStrengthSnapshot

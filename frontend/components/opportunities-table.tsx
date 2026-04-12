@@ -22,6 +22,7 @@ export function OpportunitiesTable({ signals }: { signals: TradeSetup[] }) {
             <th>Entry</th>
             <th>Stop</th>
             <th>Target</th>
+            <th>Target ETA</th>
             <th>R:R</th>
             <th>Probability</th>
             <th>Expected profit</th>
@@ -46,6 +47,12 @@ export function OpportunitiesTable({ signals }: { signals: TradeSetup[] }) {
               <td>{formatCurrency(signal.entry_price)}</td>
               <td>{formatCurrency(signal.stop_loss)}</td>
               <td>{formatCurrency(signal.target_price)}</td>
+              <td>
+                {signal.estimated_target_sessions} sessions
+                <div className="table-subtext">
+                  {formatDate(signal.estimated_target_date)}
+                </div>
+              </td>
               <td>{signal.risk_reward_ratio.toFixed(2)}</td>
               <td>{Math.round(signal.probability_score * 100)}%</td>
               <td>{formatCurrency(signal.expected_profit_amount)}</td>
@@ -75,4 +82,12 @@ function formatPattern(pattern: string) {
 function formatSignedPct(value: number) {
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(1)}%`;
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  }).format(new Date(value));
 }

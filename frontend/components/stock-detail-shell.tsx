@@ -94,6 +94,14 @@ export function StockDetailShell({ symbol }: { symbol: string }) {
               <Metric label="Entry" value={formatCurrency(signal.entry_price)} />
               <Metric label="Stop" value={formatCurrency(signal.stop_loss)} />
               <Metric label="Target" value={formatCurrency(signal.target_price)} />
+              <Metric
+                label="Target ETA"
+                value={`${signal.estimated_target_sessions} sessions`}
+              />
+              <Metric
+                label="Projected target date"
+                value={formatDate(signal.estimated_target_date)}
+              />
               <Metric label="Expected return" value={`${signal.expected_return_pct}%`} />
             </div>
           </article>
@@ -107,6 +115,34 @@ export function StockDetailShell({ symbol }: { symbol: string }) {
               <Metric label="RSI14" value={signal.indicators.rsi14.toFixed(2)} />
             </div>
           </article>
+        </section>
+      ) : null}
+
+      {signal ? (
+        <section className="panel">
+          <h2>Target timing</h2>
+          <div className="metric-grid">
+            <Metric
+              label="Projected sessions"
+              value={`${signal.estimated_target_sessions}`}
+            />
+            <Metric
+              label="Projected date"
+              value={formatDate(signal.estimated_target_date)}
+            />
+            <Metric
+              label="Historical target hit rate"
+              value={`${Math.round(signal.backtest.target_hit_rate * 100)}%`}
+            />
+            <Metric
+              label="Avg sessions to target"
+              value={
+                signal.backtest.average_target_sessions !== null
+                  ? `${signal.backtest.average_target_sessions.toFixed(1)}`
+                  : "Insufficient hits"
+              }
+            />
+          </div>
         </section>
       ) : null}
 
@@ -179,4 +215,12 @@ function formatCurrency(value: number) {
 function formatSignedPct(value: number) {
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(1)}%`;
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  }).format(new Date(value));
 }
