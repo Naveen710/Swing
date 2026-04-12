@@ -23,7 +23,7 @@ def _parse_cors_origins() -> tuple[str, ...]:
 
 
 def _resolve_universe_provider() -> str:
-    provider = os.getenv("UNIVERSE_PROVIDER", "nse").strip().lower()
+    provider = os.getenv("UNIVERSE_PROVIDER", "bundled_csv").strip().lower()
     if (
         provider == "static"
         and os.getenv("RENDER") == "true"

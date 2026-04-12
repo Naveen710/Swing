@@ -10,7 +10,7 @@ from pathlib import Path
 import requests
 
 from app.config import settings
-from app.schemas import MarketCapBucket, StockSummary
+from app.schemas import MarketCapBucket, ScanUniverse, StockSummary
 
 logger = logging.getLogger(__name__)
 
@@ -77,49 +77,55 @@ class NseEquityCsvUniverseProvider:
         timeout_seconds: int,
     ) -> None:
         self.cache_path = cache_dir / "universe" / "nse_equities.csv"
-        self.bundled_snapshot_path = (
-            Path(__file__).resolve().parents[2] / "data" / "nse_equities.csv"
-        )
+        self.bundled_data_dir = Path(__file__).resolve().parents[2] / "data"
+        self.bundled_snapshot_path = self.bundled_data_dir / "nse_equities.csv"
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
         self.cache_ttl_seconds = cache_ttl_minutes * 60
         self.source_url = source_url
         self.fallback_source_url = fallback_source_url
         self.timeout_seconds = timeout_seconds
+        self.bundled_index_paths = {
+            ScanUniverse.NIFTY500: self.bundled_data_dir / "nifty500.csv",
+            ScanUniverse.NIFTY_SMALLCAP_250: self.bundled_data_dir / "nifty_smallcap_250.csv",
+        }
+        self.smallcap_250_symbols = self._load_bundled_symbols(
+            self.bundled_index_paths[ScanUniverse.NIFTY_SMALLCAP_250]
+        )
 
     def load(self) -> list[StockListing]:
         cached_text = self._read_cache()
         bundled_text = self._read_bundled_snapshot()
         if cached_text is not None and self._is_cache_fresh():
-            return self._parse_csv(cached_text)
+            return self._parse_csv(cached_text, universe=None)
 
         try:
             csv_text = self._download_csv_text()
             self.cache_path.write_text(csv_text, encoding="utf-8")
-            return self._parse_csv(csv_text)
+            return self._parse_csv(csv_text, universe=None)
         except Exception as exc:
             if cached_text is not None:
                 logger.warning(
                     "Unable to refresh NSE universe CSV. Using cached copy instead. %s",
                     exc,
                 )
-                return self._parse_csv(cached_text)
+                return self._parse_csv(cached_text, universe=None)
             if bundled_text is not None:
                 logger.warning(
                     "Unable to refresh NSE universe CSV. Using bundled snapshot instead. %s",
                     exc,
                 )
-                return self._parse_csv(bundled_text)
+                return self._parse_csv(bundled_text, universe=None)
             raise UniverseProviderError(
                 f"Unable to load NSE equity universe from {self.source_url}: {exc}"
             ) from exc
 
-    def load_bundled(self) -> list[StockListing]:
-        bundled_text = self._read_bundled_snapshot()
+    def load_bundled(self, universe: ScanUniverse = ScanUniverse.NIFTY500) -> list[StockListing]:
+        bundled_text = self._read_bundled_snapshot(self.bundled_index_paths[universe])
         if bundled_text is None:
             raise UniverseProviderError(
-                f"Bundled NSE universe snapshot not found at {self.bundled_snapshot_path}"
+                f"Bundled universe snapshot not found for {universe.value}"
             )
-        return self._parse_csv(bundled_text)
+        return self._parse_csv(bundled_text, universe=universe)
 
     def _download_csv_text(self) -> str:
         errors: list[str] = []
@@ -154,16 +160,21 @@ class NseEquityCsvUniverseProvider:
             return None
         return self.cache_path.read_text(encoding="utf-8")
 
-    def _read_bundled_snapshot(self) -> str | None:
-        if not self.bundled_snapshot_path.exists():
+    def _read_bundled_snapshot(self, snapshot_path: Path | None = None) -> str | None:
+        target = snapshot_path or self.bundled_snapshot_path
+        if not target.exists():
             return None
-        return self.bundled_snapshot_path.read_text(encoding="utf-8")
+        return target.read_text(encoding="utf-8")
 
     def _is_cache_fresh(self) -> bool:
         age_seconds = time.time() - self.cache_path.stat().st_mtime
         return age_seconds <= self.cache_ttl_seconds
 
-    def _parse_csv(self, csv_text: str) -> list[StockListing]:
+    def _parse_csv(
+        self,
+        csv_text: str,
+        universe: ScanUniverse | None,
+    ) -> list[StockListing]:
         active_lines = [
             line
             for line in csv_text.splitlines()
@@ -175,9 +186,20 @@ class NseEquityCsvUniverseProvider:
         seen_symbols: set[str] = set()
 
         for row in reader:
-            raw_symbol = (row.get("SYMBOL") or "").strip().upper()
-            company_name = (row.get("NAME OF COMPANY") or raw_symbol).strip()
-            series = (row.get(" SERIES") or row.get("SERIES") or "").strip().upper()
+            raw_symbol = _get_csv_value(row, "SYMBOL", "Symbol").strip().upper()
+            company_name = _get_csv_value(
+                row,
+                "NAME OF COMPANY",
+                "Company Name",
+                default=raw_symbol,
+            ).strip()
+            series = _get_csv_value(
+                row,
+                " SERIES",
+                "SERIES",
+                "Series",
+            ).strip().upper()
+            industry = _get_csv_value(row, "Industry")
 
             if not raw_symbol:
                 continue
@@ -188,14 +210,20 @@ class NseEquityCsvUniverseProvider:
             seen_symbols.add(symbol)
 
             metadata = STATIC_METADATA.get(symbol.upper())
-            normalized_sector = metadata.sector if metadata else _guess_sector(company_name)
+            normalized_sector = (
+                metadata.sector
+                if metadata
+                else industry.strip() or _guess_sector(company_name)
+            )
             listings.append(
                 StockListing(
                     symbol=symbol,
                     company_name=company_name,
                     sector=normalized_sector,
-                    market_cap_bucket=(
-                        metadata.market_cap_bucket if metadata else MarketCapBucket.SMALL
+                    market_cap_bucket=self._resolve_market_cap_bucket(
+                        symbol=symbol,
+                        metadata=metadata,
+                        universe=universe,
                     ),
                 )
             )
@@ -206,13 +234,52 @@ class NseEquityCsvUniverseProvider:
         listings.sort(key=lambda listing: listing.symbol)
         return listings
 
+    def _resolve_market_cap_bucket(
+        self,
+        *,
+        symbol: str,
+        metadata: StockListing | None,
+        universe: ScanUniverse | None,
+    ) -> MarketCapBucket:
+        if metadata is not None:
+            return metadata.market_cap_bucket
+
+        if universe == ScanUniverse.NIFTY_SMALLCAP_250:
+            return MarketCapBucket.SMALL
+
+        if universe == ScanUniverse.NIFTY500 and symbol.upper() in self.smallcap_250_symbols:
+            return MarketCapBucket.SMALL
+
+        if universe == ScanUniverse.NIFTY500:
+            return MarketCapBucket.MID
+
+        return MarketCapBucket.SMALL
+
+    def _load_bundled_symbols(self, path: Path) -> set[str]:
+        csv_text = self._read_bundled_snapshot(path)
+        if csv_text is None:
+            return set()
+
+        active_lines = [
+            line
+            for line in csv_text.splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        reader = csv.DictReader(io.StringIO("\n".join(active_lines)))
+        return {
+            f"{_get_csv_value(row, 'SYMBOL', 'Symbol').strip().upper()}.NS"
+            for row in reader
+            if _get_csv_value(row, "SYMBOL", "Symbol").strip()
+        }
+
 
 def load_universe(
+    universe: ScanUniverse = ScanUniverse.NIFTY500,
     symbols: list[str] | None = None,
     sectors: list[str] | None = None,
     market_caps: list[MarketCapBucket] | None = None,
 ) -> list[StockListing]:
-    listings = _load_configured_universe()
+    listings = _load_configured_universe(universe)
 
     if symbols:
         symbol_set = {_normalize_symbol(symbol) for symbol in symbols}
@@ -233,7 +300,16 @@ def get_benchmark_listing() -> StockListing:
     return BENCHMARK_LISTING
 
 
-def _load_configured_universe() -> list[StockListing]:
+def find_listing(symbol: str) -> StockListing | None:
+    normalized_symbol = _normalize_symbol(symbol)
+    for universe in ScanUniverse:
+        listings = load_universe(universe=universe, symbols=[normalized_symbol])
+        if listings:
+            return listings[0]
+    return None
+
+
+def _load_configured_universe(universe: ScanUniverse) -> list[StockListing]:
     provider_name = settings.universe_provider
 
     if provider_name == "static":
@@ -248,7 +324,7 @@ def _load_configured_universe() -> list[StockListing]:
     )
 
     if provider_name == "bundled_csv":
-        return live_provider.load_bundled()
+        return live_provider.load_bundled(universe)
 
     if provider_name == "nse":
         return live_provider.load()
@@ -264,6 +340,18 @@ def _load_configured_universe() -> list[StockListing]:
             return list(DEFAULT_UNIVERSE)
 
     raise ValueError(f"Unsupported UNIVERSE_PROVIDER: {provider_name}")
+
+
+def _get_csv_value(
+    row: dict[str, str],
+    *keys: str,
+    default: str = "",
+) -> str:
+    for key in keys:
+        value = row.get(key)
+        if value is not None:
+            return value
+    return default
 
 
 def _normalize_symbol(symbol: str) -> str:

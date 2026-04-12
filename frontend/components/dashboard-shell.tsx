@@ -4,14 +4,21 @@ import Link from "next/link";
 import { startTransition, useEffect, useMemo, useState } from "react";
 
 import { getLatestSignals, getScanStatus, getStocks, runScan } from "../lib/api";
-import { StockSummary, TradeSetup } from "../types";
+import { ScanUniverse, StockSummary, TradeSetup } from "../types";
 import { OpportunitiesTable } from "./opportunities-table";
 
 const DEFAULT_INVESTMENT = 100000;
+const DEFAULT_UNIVERSE: ScanUniverse = "nifty500";
+const UNIVERSE_LABELS: Record<ScanUniverse, string> = {
+  nifty500: "Nifty 500",
+  nifty_smallcap_250: "Nifty Smallcap 250"
+};
 
 export function DashboardShell() {
   const [signals, setSignals] = useState<TradeSetup[]>([]);
   const [stocks, setStocks] = useState<StockSummary[]>([]);
+  const [selectedUniverse, setSelectedUniverse] =
+    useState<ScanUniverse>(DEFAULT_UNIVERSE);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [scanInProgress, setScanInProgress] = useState(false);
@@ -26,22 +33,24 @@ export function DashboardShell() {
   useEffect(() => {
     async function bootstrap() {
       try {
-        const [stockUniverse, latestSignals, status] = await Promise.all([
-          getStocks(),
-          getLatestSignals(),
-          getScanStatus()
+        const status = await getScanStatus();
+        const initialUniverse = status.universe ?? DEFAULT_UNIVERSE;
+        const [stockUniverse, latestSignals] = await Promise.all([
+          getStocks(initialUniverse),
+          getLatestSignals()
         ]);
+        setSelectedUniverse(initialUniverse);
         setStocks(stockUniverse);
         setSignals(latestSignals);
         setScanInProgress(status.scan_in_progress);
         if (status.scan_in_progress) {
           setScanNotice(
             latestSignals.length
-              ? "Showing the latest saved opportunities while a fresh NSE-wide scan runs in the background."
-              : "Full NSE scan is already running in the background. Results will refresh automatically when it finishes."
+              ? `Showing the latest saved opportunities while a fresh ${formatUniverseLabel(initialUniverse)} scan runs in the background.`
+              : `${formatUniverseLabel(initialUniverse)} scan is already running in the background. Results will refresh automatically when it finishes.`
           );
         }
-      } catch (requestError) {
+      } catch {
         setError("Unable to reach the backend API. Start the FastAPI server and retry.");
       } finally {
         setLoading(false);
@@ -50,6 +59,17 @@ export function DashboardShell() {
 
     void bootstrap();
   }, []);
+
+  useEffect(() => {
+    if (selectedSector === "All sectors") {
+      return;
+    }
+
+    const availableSectors = new Set(stocks.map((stock) => stock.sector));
+    if (!availableSectors.has(selectedSector)) {
+      setSelectedSector("All sectors");
+    }
+  }, [selectedSector, stocks]);
 
   useEffect(() => {
     if (!scanInProgress) {
@@ -66,18 +86,25 @@ export function DashboardShell() {
           return;
         }
 
+        const statusUniverse = status.universe ?? selectedUniverse;
+        setSelectedUniverse(statusUniverse);
+
         if (!status.scan_in_progress) {
           setScanInProgress(false);
           setScanNotice("Fresh scan complete. Results have been updated.");
-          const latestSignals = await getLatestSignals();
+          const [latestSignals, stockUniverse] = await Promise.all([
+            getLatestSignals(),
+            getStocks(statusUniverse)
+          ]);
           if (!cancelled) {
             setSignals(latestSignals);
+            setStocks(stockUniverse);
           }
           return;
         }
 
         setScanNotice(
-          `Scanning ${status.scanned_symbols} of ${status.universe_size} NSE stocks. The board will refresh automatically when the run finishes.`
+          `Scanning ${status.scanned_symbols} of ${status.universe_size} ${formatUniverseLabel(statusUniverse)} stocks. The board will refresh automatically when the run finishes.`
         );
       } catch {
         if (cancelled) {
@@ -100,7 +127,7 @@ export function DashboardShell() {
         window.clearTimeout(timeoutId);
       }
     };
-  }, [scanInProgress]);
+  }, [scanInProgress, selectedUniverse]);
 
   const sectors = useMemo(() => {
     const unique = new Set(stocks.map((stock) => stock.sector));
@@ -116,28 +143,34 @@ export function DashboardShell() {
       )
     : 0;
 
-  async function handleScan() {
+  async function handleScan(universe: ScanUniverse) {
+    setSelectedUniverse(universe);
     setScanning(true);
     setError(null);
 
     startTransition(() => {
-      void runScan({
-        max_results: maxResults,
-        min_probability: minProbability,
-        min_risk_reward: minRiskReward,
-        investment_amount: investmentAmount,
-        sectors: selectedSector === "All sectors" ? undefined : [selectedSector]
-      })
-        .then((response) => {
+      void Promise.all([
+        runScan({
+          universe,
+          max_results: maxResults,
+          min_probability: minProbability,
+          min_risk_reward: minRiskReward,
+          investment_amount: investmentAmount,
+          sectors: selectedSector === "All sectors" ? undefined : [selectedSector]
+        }),
+        getStocks(universe)
+      ])
+        .then(([response, stockUniverse]) => {
+          setStocks(stockUniverse);
           setSignals(response.results);
           setScanInProgress(response.scan_in_progress);
           if (response.scan_in_progress) {
             setScanNotice(
               response.refresh_started && response.results.length
-                ? "Showing the latest saved opportunities while a fresh NSE-wide scan runs in the background."
+                ? `Showing the latest saved opportunities while a fresh ${formatUniverseLabel(universe)} scan runs in the background.`
                 : response.refresh_started
-                  ? "Full NSE scan started in the background. This page will refresh automatically when it finishes."
-                  : "A full NSE scan is already running. This page will refresh automatically when it finishes."
+                  ? `${formatUniverseLabel(universe)} scan started in the background. This page will refresh automatically when it finishes.`
+                  : "Another scan is already running. This page will refresh automatically when it finishes."
             );
           } else {
             setScanNotice(null);
@@ -159,8 +192,8 @@ export function DashboardShell() {
           <p className="eyebrow">NSE systematic swing scanner</p>
           <h1>Run a ranked swing-trade scan from one dashboard.</h1>
           <p className="hero-copy">
-            This MVP uses a rule-based engine with backtest snapshots so you can
-            move from broad ideas to a product-ready scanner architecture.
+            Toggle between Nifty 500 and Nifty Smallcap 250, then run the same
+            parameter set against either basket.
           </p>
         </div>
 
@@ -182,7 +215,7 @@ export function DashboardShell() {
             </>
           ) : (
             <p className="muted">
-              Run the scanner to generate ranked opportunities.
+              Pick a universe button to generate ranked opportunities.
             </p>
           )}
         </div>
@@ -198,7 +231,7 @@ export function DashboardShell() {
           <strong>{averageProbability}%</strong>
         </article>
         <article className="stat-card">
-          <span className="stat-label">Universe size</span>
+          <span className="stat-label">{formatUniverseLabel(selectedUniverse)}</span>
           <strong>{stocks.length || 20} stocks</strong>
         </article>
       </section>
@@ -208,19 +241,34 @@ export function DashboardShell() {
           <div className="panel-header">
             <div>
               <h2>Scanner controls</h2>
-              <p>Adjust the filters, then trigger a fresh scan.</p>
+              <p>Adjust the filters, then choose which index basket to scan.</p>
             </div>
-            <button
-              className="primary-button"
-              onClick={() => void handleScan()}
-              disabled={scanning || scanInProgress}
-            >
-              {scanning
-                ? "Starting..."
-                : scanInProgress
-                  ? "Refreshing in background..."
-                  : "Run scanner"}
-            </button>
+            <div className="button-group">
+              <button
+                className={
+                  selectedUniverse === "nifty500" ? "primary-button" : "secondary-button"
+                }
+                onClick={() => void handleScan("nifty500")}
+                disabled={scanning || scanInProgress}
+              >
+                {scanning && selectedUniverse === "nifty500"
+                  ? "Starting..."
+                  : "Scan Nifty 500"}
+              </button>
+              <button
+                className={
+                  selectedUniverse === "nifty_smallcap_250"
+                    ? "primary-button"
+                    : "secondary-button"
+                }
+                onClick={() => void handleScan("nifty_smallcap_250")}
+                disabled={scanning || scanInProgress}
+              >
+                {scanning && selectedUniverse === "nifty_smallcap_250"
+                  ? "Starting..."
+                  : "Scan Smallcap 250"}
+              </button>
+            </div>
           </div>
 
           <div className="control-row">
@@ -289,10 +337,11 @@ export function DashboardShell() {
         <aside className="panel insight-panel">
           <h2>What this MVP already proves</h2>
           <ul className="insight-list">
+            <li>Your current filters can be run against either Nifty 500 or Nifty Smallcap 250 from the same dashboard.</li>
             <li>Pattern ranking with consolidation breakout, EMA pullback, relative-strength breakout, support bounce, and VCP.</li>
             <li>Relative-strength overlay versus NIFTY is part of the ranking now.</li>
             <li>Per-signal backtest statistics you can later replace with real historical data.</li>
-            <li>Frontend/backend contract ready for live NSE and Yahoo Finance providers.</li>
+            <li>Frontend and backend are now aligned to named index universes instead of one fixed basket.</li>
           </ul>
         </aside>
       </section>
@@ -301,7 +350,10 @@ export function DashboardShell() {
         <div className="panel-header">
           <div>
             <h2>Top swing opportunities</h2>
-            <p>Sorted by setup quality, reward potential, and outperformance versus NIFTY.</p>
+            <p>
+              Sorted by setup quality, reward potential, and outperformance
+              versus NIFTY for {formatUniverseLabel(selectedUniverse)}.
+            </p>
           </div>
         </div>
 
@@ -320,4 +372,8 @@ function formatPattern(pattern: string) {
     .split("_")
     .map((part) => part[0]?.toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function formatUniverseLabel(universe: ScanUniverse) {
+  return UNIVERSE_LABELS[universe];
 }

@@ -20,6 +20,11 @@ class MarketCapBucket(str, Enum):
     SMALL = "small_cap"
 
 
+class ScanUniverse(str, Enum):
+    NIFTY500 = "nifty500"
+    NIFTY_SMALLCAP_250 = "nifty_smallcap_250"
+
+
 class StockSummary(BaseModel):
     symbol: str
     company_name: str
@@ -92,6 +97,7 @@ class TradeSetup(BaseModel):
 
 
 class ScanRequest(BaseModel):
+    universe: ScanUniverse = Field(default=ScanUniverse.NIFTY500)
     symbols: list[str] | None = Field(
         default=None,
         description="Optional subset of NSE symbols to scan.",
@@ -106,6 +112,7 @@ class ScanRequest(BaseModel):
 
 
 class ScanResponse(BaseModel):
+    universe: ScanUniverse
     generated_at: datetime
     universe_size: int
     scanned_symbols: int
@@ -116,6 +123,7 @@ class ScanResponse(BaseModel):
 
 
 class ScanStatusResponse(BaseModel):
+    universe: ScanUniverse | None
     scan_in_progress: bool
     latest_generated_at: datetime | None
     universe_size: int

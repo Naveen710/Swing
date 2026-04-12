@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from app.config import settings
-from app.schemas import ScanRequest, ScanStatusResponse
+from app.schemas import ScanRequest, ScanStatusResponse, ScanUniverse
 from app.services.scanner import scanner_service
 
 router = APIRouter()
@@ -22,8 +22,8 @@ def healthcheck() -> dict[str, str | bool]:
 
 
 @router.get("/stocks")
-def list_stocks() -> list[dict[str, str]]:
-    return scanner_service.list_stocks()
+def list_stocks(universe: ScanUniverse = ScanUniverse.NIFTY500) -> list[dict[str, str]]:
+    return scanner_service.list_stocks(universe=universe)
 
 
 @router.get("/signals")

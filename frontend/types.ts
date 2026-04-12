@@ -6,6 +6,7 @@ export type PatternType =
   | "volatility_contraction";
 
 export type MarketCapBucket = "large_cap" | "mid_cap" | "small_cap";
+export type ScanUniverse = "nifty500" | "nifty_smallcap_250";
 
 export interface StockSummary {
   symbol: string;
@@ -70,6 +71,7 @@ export interface TradeSetup {
 }
 
 export interface ScanResponse {
+  universe: ScanUniverse;
   generated_at: string;
   universe_size: number;
   scanned_symbols: number;
@@ -80,6 +82,7 @@ export interface ScanResponse {
 }
 
 export interface ScanStatusResponse {
+  universe: ScanUniverse | null;
   scan_in_progress: boolean;
   latest_generated_at: string | null;
   universe_size: number;

@@ -1,4 +1,5 @@
 import {
+  ScanUniverse,
   ScanResponse,
   ScanStatusResponse,
   StockDetailResponse,
@@ -10,6 +11,7 @@ const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api";
 
 interface ScanPayload {
+  universe: ScanUniverse;
   max_results: number;
   min_probability: number;
   min_risk_reward: number;
@@ -34,8 +36,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-export function getStocks(): Promise<StockSummary[]> {
-  return request<StockSummary[]>("/stocks");
+export function getStocks(universe: ScanUniverse): Promise<StockSummary[]> {
+  return request<StockSummary[]>(`/stocks?universe=${encodeURIComponent(universe)}`);
 }
 
 export function getLatestSignals(): Promise<TradeSetup[]> {

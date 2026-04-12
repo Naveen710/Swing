@@ -13,6 +13,7 @@ from app.schemas import (
     RelativeStrengthSnapshot,
     ScanRequest,
     ScanResponse,
+    ScanUniverse,
     StockDetailResponse,
     TradeSetup,
 )
@@ -25,7 +26,12 @@ from app.services.relative_strength import (
     build_relative_strength_snapshot,
 )
 from app.services.store import signal_store
-from app.services.universe import StockListing, get_benchmark_listing, load_universe
+from app.services.universe import (
+    StockListing,
+    find_listing,
+    get_benchmark_listing,
+    load_universe,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,13 +69,22 @@ class ScannerService:
         self._active_scan: ActiveScanState | None = None
         self._active_scan_lock = threading.Lock()
 
-    def list_stocks(self) -> list[dict[str, str]]:
-        return [listing.to_summary().model_dump() for listing in load_universe()]
+    def list_stocks(self, universe: ScanUniverse = ScanUniverse.NIFTY500) -> list[dict[str, str]]:
+        return [
+            listing.to_summary().model_dump()
+            for listing in load_universe(universe=universe)
+        ]
 
     def run_scan(self, request: ScanRequest) -> ScanResponse:
-        listings = load_universe(request.symbols, request.sectors, request.market_caps)
+        listings = load_universe(
+            universe=request.universe,
+            symbols=request.symbols,
+            sectors=request.sectors,
+            market_caps=request.market_caps,
+        )
         if not listings:
             return ScanResponse(
+                universe=request.universe,
                 generated_at=datetime.now(UTC),
                 universe_size=0,
                 scanned_symbols=0,
@@ -78,10 +93,22 @@ class ScannerService:
 
         if self._should_run_async(listings, request):
             refresh_started = self._start_incremental_scan(request, listings)
-            generated_at, universe_size, scanned_symbols, cached_results = signal_store.snapshot(
+            (
+                cached_universe,
+                generated_at,
+                universe_size,
+                scanned_symbols,
+                cached_results,
+            ) = signal_store.snapshot(
                 request.max_results
             )
+            if cached_universe != request.universe:
+                cached_results = []
+                generated_at = None
+                universe_size = len(listings)
+                scanned_symbols = 0
             return ScanResponse(
+                universe=request.universe,
                 generated_at=generated_at or datetime.now(UTC),
                 universe_size=universe_size or len(listings),
                 scanned_symbols=scanned_symbols,
@@ -114,12 +141,14 @@ class ScannerService:
         generated_at = datetime.now(UTC)
         signal_store.replace(
             limited,
+            universe=request.universe,
             generated_at=generated_at,
             universe_size=len(listings),
             scanned_symbols=len(listings),
         )
 
         return ScanResponse(
+            universe=request.universe,
             generated_at=generated_at,
             universe_size=len(listings),
             scanned_symbols=len(listings),
@@ -132,6 +161,7 @@ class ScannerService:
     def scan_status(self):
         self._advance_incremental_scan()
         (
+            universe,
             scan_in_progress,
             generated_at,
             universe_size,
@@ -139,6 +169,7 @@ class ScannerService:
             latest_results_count,
         ) = signal_store.status()
         return {
+            "universe": universe,
             "scan_in_progress": scan_in_progress,
             "latest_generated_at": generated_at,
             "universe_size": universe_size,
@@ -147,11 +178,10 @@ class ScannerService:
         }
 
     def get_stock_detail(self, symbol: str) -> StockDetailResponse | None:
-        listings = load_universe(symbols=[symbol])
-        if not listings:
+        listing = find_listing(symbol)
+        if listing is None:
             return None
 
-        listing = listings[0]
         try:
             history = self.market_data.get_history(listing)
         except MarketDataError as exc:
@@ -176,12 +206,12 @@ class ScannerService:
         )
 
     def get_backtest(self, symbol: str) -> BacktestStats | None:
-        listings = load_universe(symbols=[symbol])
-        if not listings:
+        listing = find_listing(symbol)
+        if listing is None:
             return None
 
         try:
-            history = self.market_data.get_history(listings[0])
+            history = self.market_data.get_history(listing)
         except MarketDataError as exc:
             logger.warning("Unable to build backtest for %s. %s", symbol, exc)
             return None
@@ -469,7 +499,10 @@ class ScannerService:
         with self._active_scan_lock:
             if self._active_scan is not None:
                 return False
-            if not signal_store.begin_scan(universe_size=len(listings)):
+            if not signal_store.begin_scan(
+                universe=request.universe,
+                universe_size=len(listings),
+            ):
                 return False
 
             self._active_scan = ActiveScanState(
@@ -536,6 +569,7 @@ class ScannerService:
         generated_at = datetime.now(UTC)
         signal_store.replace(
             limited,
+            universe=state.request.universe,
             generated_at=generated_at,
             universe_size=len(state.listings),
             scanned_symbols=len(state.listings),

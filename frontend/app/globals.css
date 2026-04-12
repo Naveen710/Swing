@@ -153,9 +153,39 @@ select {
   transform: translateY(-1px);
 }
 
+.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 12px 18px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text);
+  transition: transform 120ms ease, border-color 120ms ease, opacity 120ms ease;
+}
+
+.secondary-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(241, 104, 0, 0.28);
+}
+
 .primary-button:disabled {
   opacity: 0.68;
   cursor: wait;
+}
+
+.secondary-button:disabled {
+  opacity: 0.68;
+  cursor: wait;
+}
+
+.button-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .stats-grid,
@@ -318,5 +348,9 @@ th {
 
   .panel-header {
     flex-direction: column;
+  }
+
+  .button-group {
+    width: 100%;
   }
 }

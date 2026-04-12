@@ -4,7 +4,7 @@ import threading
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from app.schemas import TradeSetup
+from app.schemas import ScanUniverse, TradeSetup
 
 
 class SignalStore:
@@ -15,17 +15,20 @@ class SignalStore:
         self._universe_size = 0
         self._scanned_symbols = 0
         self._scan_in_progress = False
+        self._universe: ScanUniverse | None = None
 
     def replace(
         self,
         signals: Sequence[TradeSetup],
         *,
+        universe: ScanUniverse,
         generated_at: datetime,
         universe_size: int,
         scanned_symbols: int,
     ) -> None:
         with self._lock:
             self._signals = list(signals)
+            self._universe = universe
             self._generated_at = generated_at
             self._universe_size = universe_size
             self._scanned_symbols = scanned_symbols
@@ -44,6 +47,7 @@ class SignalStore:
             )
 
     def snapshot(self, max_results: int | None = None) -> tuple[
+        ScanUniverse | None,
         datetime | None,
         int,
         int,
@@ -54,16 +58,18 @@ class SignalStore:
             if max_results is not None:
                 signals = signals[:max_results]
             return (
+                self._universe,
                 self._generated_at,
                 self._universe_size,
                 self._scanned_symbols,
                 signals,
             )
 
-    def begin_scan(self, *, universe_size: int) -> bool:
+    def begin_scan(self, *, universe: ScanUniverse, universe_size: int) -> bool:
         with self._lock:
             if self._scan_in_progress:
                 return False
+            self._universe = universe
             self._universe_size = universe_size
             self._scanned_symbols = 0
             self._scan_in_progress = True
@@ -79,9 +85,10 @@ class SignalStore:
             if universe_size is not None:
                 self._universe_size = universe_size
 
-    def status(self) -> tuple[bool, datetime | None, int, int, int]:
+    def status(self) -> tuple[ScanUniverse | None, bool, datetime | None, int, int, int]:
         with self._lock:
             return (
+                self._universe,
                 self._scan_in_progress,
                 self._generated_at,
                 self._universe_size,
