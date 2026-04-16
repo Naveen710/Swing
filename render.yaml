@@ -8,7 +8,7 @@ services:
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: APP_RELEASE
-        value: target-dates-2026-04-12-1
+        value: benchmark-fallback-2026-04-16-1
       - key: PYTHON_VERSION
         value: 3.13.2
       - key: MARKET_DATA_PROVIDER
@@ -27,6 +27,8 @@ services:
         value: "500"
       - key: BENCHMARK_SYMBOL
         value: ^NSEI
+      - key: BENCHMARK_SYMBOL_FALLBACKS
+        value: NIFTYBEES.NS
       - key: BENCHMARK_NAME
         value: NIFTY 50
       - key: NSE_EQUITY_FALLBACK_CSV_URL

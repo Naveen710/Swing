@@ -28,8 +28,8 @@ from app.services.relative_strength import (
 from app.services.store import signal_store
 from app.services.universe import (
     StockListing,
+    get_benchmark_candidates,
     find_listing,
-    get_benchmark_listing,
     load_universe,
 )
 
@@ -441,24 +441,25 @@ class ScannerService:
         self,
         lookback_days: int,
     ) -> RelativeStrengthContext | None:
-        benchmark_listing = get_benchmark_listing()
-        try:
-            benchmark_frame = self.market_data.get_history(
-                benchmark_listing,
-                lookback_days=lookback_days,
-            )
-        except MarketDataError as exc:
-            logger.warning(
-                "Benchmark data unavailable for %s. Relative strength will be neutral. %s",
-                benchmark_listing.symbol,
-                exc,
-            )
-            return None
+        failures: list[str] = []
+        for benchmark_listing in get_benchmark_candidates():
+            try:
+                benchmark_frame = self.market_data.get_history(
+                    benchmark_listing,
+                    lookback_days=lookback_days,
+                )
+                return RelativeStrengthContext(
+                    benchmark_listing=benchmark_listing,
+                    benchmark_frame=benchmark_frame,
+                )
+            except MarketDataError as exc:
+                failures.append(f"{benchmark_listing.symbol}: {exc}")
 
-        return RelativeStrengthContext(
-            benchmark_listing=benchmark_listing,
-            benchmark_frame=benchmark_frame,
+        logger.warning(
+            "Benchmark data unavailable for all configured symbols. Relative strength will be neutral. %s",
+            " | ".join(failures),
         )
+        return None
 
     def _collect_candidates(
         self,

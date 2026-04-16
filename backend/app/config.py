@@ -22,6 +22,20 @@ def _parse_cors_origins() -> tuple[str, ...]:
     )
 
 
+def _parse_benchmark_symbol_fallbacks() -> tuple[str, ...]:
+    raw = os.getenv("BENCHMARK_SYMBOL_FALLBACKS")
+    if raw:
+        fallbacks = tuple(
+            symbol.strip()
+            for symbol in raw.split(",")
+            if symbol.strip()
+        )
+        if fallbacks:
+            return fallbacks
+
+    return ("NIFTYBEES.NS",)
+
+
 def _resolve_universe_provider() -> str:
     provider = os.getenv("UNIVERSE_PROVIDER", "bundled_csv").strip().lower()
     if (
@@ -82,6 +96,7 @@ class Settings:
     )
     benchmark_symbol: str = os.getenv("BENCHMARK_SYMBOL", "^NSEI")
     benchmark_name: str = os.getenv("BENCHMARK_NAME", "NIFTY 50")
+    benchmark_symbol_fallbacks: tuple[str, ...] = _parse_benchmark_symbol_fallbacks()
     cors_origins: tuple[str, ...] = _parse_cors_origins()
 
 

@@ -18,6 +18,7 @@ def healthcheck() -> dict[str, str | bool]:
         "universe_provider": settings.universe_provider,
         "allow_demo_fallback": settings.allow_demo_fallback,
         "benchmark_symbol": settings.benchmark_symbol,
+        "benchmark_symbol_fallbacks": ",".join(settings.benchmark_symbol_fallbacks),
     }
 
 

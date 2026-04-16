@@ -61,6 +61,16 @@ BENCHMARK_LISTING = StockListing(
     "Benchmark",
     MarketCapBucket.LARGE,
 )
+BENCHMARK_FALLBACK_LISTINGS: tuple[StockListing, ...] = tuple(
+    StockListing(
+        symbol,
+        settings.benchmark_name,
+        "Benchmark",
+        MarketCapBucket.LARGE,
+    )
+    for symbol in settings.benchmark_symbol_fallbacks
+    if symbol.strip() and symbol.strip() != settings.benchmark_symbol
+)
 
 
 class UniverseProviderError(RuntimeError):
@@ -298,6 +308,10 @@ def load_universe(
 
 def get_benchmark_listing() -> StockListing:
     return BENCHMARK_LISTING
+
+
+def get_benchmark_candidates() -> tuple[StockListing, ...]:
+    return (BENCHMARK_LISTING, *BENCHMARK_FALLBACK_LISTINGS)
 
 
 def find_listing(symbol: str) -> StockListing | None:
