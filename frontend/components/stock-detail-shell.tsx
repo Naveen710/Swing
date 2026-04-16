@@ -10,21 +10,30 @@ import { PriceChart } from "./price-chart";
 export function StockDetailShell({ symbol }: { symbol: string }) {
   const [detail, setDetail] = useState<StockDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const response = await getStockDetail(symbol);
-        setDetail(response);
-      } catch {
-        setError("Unable to load this stock. Verify the backend is running.");
-      } finally {
-        setLoading(false);
-      }
+  async function loadDetail(options?: { silent?: boolean }) {
+    if (!options?.silent) {
+      setRefreshing(true);
     }
 
-    void load();
+    try {
+      const response = await getStockDetail(symbol);
+      setDetail(response);
+      setError(null);
+    } catch {
+      setError("Unable to load this stock. Verify the backend is running.");
+    } finally {
+      if (!options?.silent) {
+        setRefreshing(false);
+      }
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadDetail({ silent: true });
   }, [symbol]);
 
   if (loading) {
@@ -58,6 +67,14 @@ export function StockDetailShell({ symbol }: { symbol: string }) {
           <p className="eyebrow">{detail.stock.sector}</p>
           <h1>{detail.stock.company_name}</h1>
           <p className="hero-copy">{detail.stock.symbol}</p>
+          <button
+            className="secondary-button"
+            onClick={() => void loadDetail()}
+            disabled={refreshing}
+            type="button"
+          >
+            {refreshing ? "Refreshing..." : "Refresh detail"}
+          </button>
         </div>
 
         {signal ? (

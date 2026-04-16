@@ -21,6 +21,7 @@ export function DashboardShell() {
     useState<ScanUniverse>(DEFAULT_UNIVERSE);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [scanInProgress, setScanInProgress] = useState(false);
   const [scanNotice, setScanNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -30,26 +31,55 @@ export function DashboardShell() {
   const [investmentAmount, setInvestmentAmount] = useState(DEFAULT_INVESTMENT);
   const [selectedSector, setSelectedSector] = useState("All sectors");
 
+  async function refreshDashboard(
+    preferredUniverse?: ScanUniverse,
+    options?: { silent?: boolean }
+  ) {
+    if (!options?.silent) {
+      setRefreshing(true);
+    }
+
+    try {
+      const status = await getScanStatus();
+      const activeUniverse = preferredUniverse ?? status.universe ?? DEFAULT_UNIVERSE;
+      const [stockUniverse, latestSignals] = await Promise.all([
+        getStocks(activeUniverse),
+        getLatestSignals()
+      ]);
+
+      setSelectedUniverse(activeUniverse);
+      setStocks(stockUniverse);
+      setSignals(latestSignals);
+      setScanInProgress(status.scan_in_progress);
+
+      if (status.scan_in_progress) {
+        setScanNotice(
+          latestSignals.length
+            ? `Showing the latest saved opportunities while a fresh ${formatUniverseLabel(activeUniverse)} scan runs in the background.`
+            : `Scanning ${status.scanned_symbols} of ${status.universe_size} ${formatUniverseLabel(activeUniverse)} stocks. Click Refresh results to pull the newest saved board.`
+        );
+      } else if (!options?.silent) {
+        setScanNotice(
+          latestSignals.length
+            ? `Latest ${formatUniverseLabel(activeUniverse)} results loaded.`
+            : `No saved opportunities are available yet for ${formatUniverseLabel(activeUniverse)}.`
+        );
+      }
+
+      setError(null);
+    } catch {
+      setError("Unable to refresh the latest results from the backend.");
+    } finally {
+      if (!options?.silent) {
+        setRefreshing(false);
+      }
+    }
+  }
+
   useEffect(() => {
     async function bootstrap() {
       try {
-        const status = await getScanStatus();
-        const initialUniverse = status.universe ?? DEFAULT_UNIVERSE;
-        const [stockUniverse, latestSignals] = await Promise.all([
-          getStocks(initialUniverse),
-          getLatestSignals()
-        ]);
-        setSelectedUniverse(initialUniverse);
-        setStocks(stockUniverse);
-        setSignals(latestSignals);
-        setScanInProgress(status.scan_in_progress);
-        if (status.scan_in_progress) {
-          setScanNotice(
-            latestSignals.length
-              ? `Showing the latest saved opportunities while a fresh ${formatUniverseLabel(initialUniverse)} scan runs in the background.`
-              : `${formatUniverseLabel(initialUniverse)} scan is already running in the background. Results will refresh automatically when it finishes.`
-          );
-        }
+        await refreshDashboard(undefined, { silent: true });
       } catch {
         setError("Unable to reach the backend API. Start the FastAPI server and retry.");
       } finally {
@@ -91,14 +121,9 @@ export function DashboardShell() {
 
         if (!status.scan_in_progress) {
           setScanInProgress(false);
-          setScanNotice("Fresh scan complete. Results have been updated.");
-          const [latestSignals, stockUniverse] = await Promise.all([
-            getLatestSignals(),
-            getStocks(statusUniverse)
-          ]);
           if (!cancelled) {
-            setSignals(latestSignals);
-            setStocks(stockUniverse);
+            await refreshDashboard(statusUniverse);
+            setScanNotice("Fresh scan complete. Results have been updated.");
           }
           return;
         }
@@ -169,11 +194,11 @@ export function DashboardShell() {
               response.refresh_started && response.results.length
                 ? `Showing the latest saved opportunities while a fresh ${formatUniverseLabel(universe)} scan runs in the background.`
                 : response.refresh_started
-                  ? `${formatUniverseLabel(universe)} scan started in the background. This page will refresh automatically when it finishes.`
-                  : "Another scan is already running. This page will refresh automatically when it finishes."
+                  ? `${formatUniverseLabel(universe)} scan started in the background. Use Refresh results any time to pull the latest saved board.`
+                  : "Another scan is already running. Use Refresh results to pull the latest saved board."
             );
           } else {
-            setScanNotice(null);
+            setScanNotice("Scan complete. Results are ready below.");
           }
         })
         .catch(() => {
@@ -249,7 +274,7 @@ export function DashboardShell() {
                   selectedUniverse === "nifty500" ? "primary-button" : "secondary-button"
                 }
                 onClick={() => void handleScan("nifty500")}
-                disabled={scanning || scanInProgress}
+                disabled={scanning || refreshing}
               >
                 {scanning && selectedUniverse === "nifty500"
                   ? "Starting..."
@@ -262,11 +287,18 @@ export function DashboardShell() {
                     : "secondary-button"
                 }
                 onClick={() => void handleScan("nifty_smallcap_250")}
-                disabled={scanning || scanInProgress}
+                disabled={scanning || refreshing}
               >
                 {scanning && selectedUniverse === "nifty_smallcap_250"
                   ? "Starting..."
                   : "Scan Smallcap 250"}
+              </button>
+              <button
+                className="secondary-button"
+                onClick={() => void refreshDashboard(selectedUniverse)}
+                disabled={refreshing || loading}
+              >
+                {refreshing ? "Refreshing..." : "Refresh results"}
               </button>
             </div>
           </div>
