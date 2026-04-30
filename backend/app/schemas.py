@@ -23,6 +23,7 @@ class MarketCapBucket(str, Enum):
 class ScanUniverse(str, Enum):
     NIFTY500 = "nifty500"
     NIFTY_SMALLCAP_250 = "nifty_smallcap_250"
+    MID_SMALL_2000_PLUS = "mid_small_2000_plus"
 
 
 class StockSummary(BaseModel):

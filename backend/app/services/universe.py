@@ -94,48 +94,63 @@ class NseEquityCsvUniverseProvider:
         self.source_url = source_url
         self.fallback_source_url = fallback_source_url
         self.timeout_seconds = timeout_seconds
+        self.nifty_100_path = self.bundled_data_dir / "nifty100.csv"
         self.bundled_index_paths = {
             ScanUniverse.NIFTY500: self.bundled_data_dir / "nifty500.csv",
             ScanUniverse.NIFTY_SMALLCAP_250: self.bundled_data_dir / "nifty_smallcap_250.csv",
         }
+        self.nifty_100_symbols = self._load_bundled_symbols(self.nifty_100_path)
+        self.nifty_500_symbols = self._load_bundled_symbols(
+            self.bundled_index_paths[ScanUniverse.NIFTY500]
+        )
         self.smallcap_250_symbols = self._load_bundled_symbols(
             self.bundled_index_paths[ScanUniverse.NIFTY_SMALLCAP_250]
         )
 
-    def load(self) -> list[StockListing]:
+    def load(self, universe: ScanUniverse | None = None) -> list[StockListing]:
         cached_text = self._read_cache()
         bundled_text = self._read_bundled_snapshot()
         if cached_text is not None and self._is_cache_fresh():
-            return self._parse_csv(cached_text, universe=None)
+            listings = self._parse_csv(cached_text, universe=universe)
+            return self._shape_universe(listings, universe)
 
         try:
             csv_text = self._download_csv_text()
             self.cache_path.write_text(csv_text, encoding="utf-8")
-            return self._parse_csv(csv_text, universe=None)
+            listings = self._parse_csv(csv_text, universe=universe)
+            return self._shape_universe(listings, universe)
         except Exception as exc:
             if cached_text is not None:
                 logger.warning(
                     "Unable to refresh NSE universe CSV. Using cached copy instead. %s",
                     exc,
                 )
-                return self._parse_csv(cached_text, universe=None)
+                listings = self._parse_csv(cached_text, universe=universe)
+                return self._shape_universe(listings, universe)
             if bundled_text is not None:
                 logger.warning(
                     "Unable to refresh NSE universe CSV. Using bundled snapshot instead. %s",
                     exc,
                 )
-                return self._parse_csv(bundled_text, universe=None)
+                listings = self._parse_csv(bundled_text, universe=universe)
+                return self._shape_universe(listings, universe)
             raise UniverseProviderError(
                 f"Unable to load NSE equity universe from {self.source_url}: {exc}"
             ) from exc
 
     def load_bundled(self, universe: ScanUniverse = ScanUniverse.NIFTY500) -> list[StockListing]:
-        bundled_text = self._read_bundled_snapshot(self.bundled_index_paths[universe])
+        if universe == ScanUniverse.MID_SMALL_2000_PLUS:
+            bundled_text = self._read_bundled_snapshot(self.bundled_snapshot_path)
+        else:
+            bundled_text = self._read_bundled_snapshot(self.bundled_index_paths[universe])
+
         if bundled_text is None:
             raise UniverseProviderError(
                 f"Bundled universe snapshot not found for {universe.value}"
             )
-        return self._parse_csv(bundled_text, universe=universe)
+
+        listings = self._parse_csv(bundled_text, universe=universe)
+        return self._shape_universe(listings, universe)
 
     def _download_csv_text(self) -> str:
         errors: list[str] = []
@@ -213,6 +228,8 @@ class NseEquityCsvUniverseProvider:
 
             if not raw_symbol:
                 continue
+            if universe == ScanUniverse.MID_SMALL_2000_PLUS and series and series != "EQ":
+                continue
 
             symbol = f"{raw_symbol}.NS"
             if symbol in seen_symbols:
@@ -254,16 +271,57 @@ class NseEquityCsvUniverseProvider:
         if metadata is not None:
             return metadata.market_cap_bucket
 
-        if universe == ScanUniverse.NIFTY_SMALLCAP_250:
+        if symbol.upper() in self.nifty_100_symbols:
+            return MarketCapBucket.LARGE
+
+        if symbol.upper() in self.smallcap_250_symbols:
             return MarketCapBucket.SMALL
 
-        if universe == ScanUniverse.NIFTY500 and symbol.upper() in self.smallcap_250_symbols:
+        if symbol.upper() in self.nifty_500_symbols:
+            return MarketCapBucket.MID
+
+        if universe == ScanUniverse.NIFTY_SMALLCAP_250:
             return MarketCapBucket.SMALL
 
         if universe == ScanUniverse.NIFTY500:
             return MarketCapBucket.MID
 
+        if universe == ScanUniverse.MID_SMALL_2000_PLUS:
+            return MarketCapBucket.SMALL
+
         return MarketCapBucket.SMALL
+
+    def _shape_universe(
+        self,
+        listings: list[StockListing],
+        universe: ScanUniverse | None,
+    ) -> list[StockListing]:
+        if universe is None:
+            return listings
+
+        if universe == ScanUniverse.NIFTY500:
+            return [
+                listing
+                for listing in listings
+                if listing.symbol.upper() in self.nifty_500_symbols
+            ]
+
+        if universe == ScanUniverse.NIFTY_SMALLCAP_250:
+            return [
+                listing
+                for listing in listings
+                if listing.symbol.upper() in self.smallcap_250_symbols
+            ]
+
+        if universe == ScanUniverse.MID_SMALL_2000_PLUS:
+            return [
+                listing
+                for listing in listings
+                if listing.symbol.upper() not in self.nifty_100_symbols
+                and listing.market_cap_bucket in {MarketCapBucket.MID, MarketCapBucket.SMALL}
+            ]
+
+        return listings
 
     def _load_bundled_symbols(self, path: Path) -> set[str]:
         csv_text = self._read_bundled_snapshot(path)
@@ -341,11 +399,11 @@ def _load_configured_universe(universe: ScanUniverse) -> list[StockListing]:
         return live_provider.load_bundled(universe)
 
     if provider_name == "nse":
-        return live_provider.load()
+        return live_provider.load(universe=universe)
 
     if provider_name == "auto":
         try:
-            return live_provider.load()
+            return live_provider.load(universe=universe)
         except UniverseProviderError as exc:
             logger.warning(
                 "Falling back to the built-in curated universe because live NSE loading failed. %s",

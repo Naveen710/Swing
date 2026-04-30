@@ -11,7 +11,8 @@ const DEFAULT_INVESTMENT = 100000;
 const DEFAULT_UNIVERSE: ScanUniverse = "nifty500";
 const UNIVERSE_LABELS: Record<ScanUniverse, string> = {
   nifty500: "Nifty 500",
-  nifty_smallcap_250: "Nifty Smallcap 250"
+  nifty_smallcap_250: "Nifty Smallcap 250",
+  mid_small_2000_plus: "Mid & Small 2000+"
 };
 
 export function DashboardShell() {
@@ -217,8 +218,9 @@ export function DashboardShell() {
           <p className="eyebrow">NSE systematic swing scanner</p>
           <h1>Run a ranked swing-trade scan from one dashboard.</h1>
           <p className="hero-copy">
-            Toggle between Nifty 500 and Nifty Smallcap 250, then run the same
-            parameter set against either basket.
+            Toggle between Nifty 500, Nifty Smallcap 250, or a broader 2000+
+            mid-and-small-cap discovery basket, then run the same parameter set
+            against that universe.
           </p>
         </div>
 
@@ -294,6 +296,19 @@ export function DashboardShell() {
                   : "Scan Smallcap 250"}
               </button>
               <button
+                className={
+                  selectedUniverse === "mid_small_2000_plus"
+                    ? "primary-button"
+                    : "secondary-button"
+                }
+                onClick={() => void handleScan("mid_small_2000_plus")}
+                disabled={scanning || refreshing}
+              >
+                {scanning && selectedUniverse === "mid_small_2000_plus"
+                  ? "Starting..."
+                  : "Scan Mid & Small 2000+"}
+              </button>
+              <button
                 className="secondary-button"
                 onClick={() => void refreshDashboard(selectedUniverse)}
                 disabled={refreshing || loading}
@@ -367,13 +382,13 @@ export function DashboardShell() {
         </article>
 
         <aside className="panel insight-panel">
-          <h2>What this MVP already proves</h2>
+          <h2>What will help you find better stocks</h2>
           <ul className="insight-list">
-            <li>Your current filters can be run against either Nifty 500 or Nifty Smallcap 250 from the same dashboard.</li>
-            <li>Pattern ranking with consolidation breakout, EMA pullback, relative-strength breakout, support bounce, and VCP.</li>
-            <li>Relative-strength overlay versus NIFTY is part of the ranking now.</li>
-            <li>Per-signal backtest statistics you can later replace with real historical data.</li>
-            <li>Frontend and backend are now aligned to named index universes instead of one fixed basket.</li>
+            <li>Add a liquidity filter using average traded value so illiquid names do not rank above cleaner swing setups.</li>
+            <li>Rank sectors by relative strength and show only stocks from the strongest sectors when the broad market is weak.</li>
+            <li>Add earnings and corporate-action awareness so fresh setups are not taken right into high-volatility event risk.</li>
+            <li>Track breakout quality with multi-day volume expansion, not just one-day spikes, to reduce false starts.</li>
+            <li>The new 2000+ mid/small-cap button widens discovery while keeping the current Nifty buttons unchanged.</li>
           </ul>
         </aside>
       </section>

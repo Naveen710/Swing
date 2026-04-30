@@ -590,7 +590,8 @@ class ScannerService:
                         state.request.lookback_days
                     )
 
-                chunk_size = max(5, min(settings.yahoo_batch_size, 25))
+                chunk_cap = 80 if len(state.listings) >= 2000 else 40
+                chunk_size = max(10, min(settings.yahoo_batch_size, chunk_cap))
                 chunk = state.listings[state.cursor : state.cursor + chunk_size]
                 if not chunk:
                     self._finish_incremental_scan(state)

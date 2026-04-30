@@ -8,7 +8,7 @@ services:
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: APP_RELEASE
-        value: benchmark-fallback-2026-04-16-1
+        value: mid-small-2000-2026-04-30-1
       - key: PYTHON_VERSION
         value: 3.13.2
       - key: MARKET_DATA_PROVIDER
@@ -20,9 +20,9 @@ services:
       - key: ALLOW_DEMO_FALLBACK
         value: "0"
       - key: YAHOO_BATCH_SIZE
-        value: "25"
+        value: "60"
       - key: MARKET_DATA_MEMORY_CACHE_SYMBOLS
-        value: "24"
+        value: "48"
       - key: ASYNC_SCAN_UNIVERSE_THRESHOLD
         value: "500"
       - key: BENCHMARK_SYMBOL
