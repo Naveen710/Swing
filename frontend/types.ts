@@ -43,6 +43,37 @@ export interface RelativeStrengthSnapshot {
   excess_return_120d_pct: number;
 }
 
+export interface LiquiditySnapshot {
+  average_traded_value_20d_cr: number;
+  average_traded_value_50d_cr: number;
+  score: number;
+  passes_filter: boolean;
+}
+
+export interface AccumulationSnapshot {
+  score: number;
+  up_volume_ratio_10d: number;
+  atr_contraction_ratio: number;
+  closes_near_high_10d: number;
+}
+
+export interface SectorStrengthSnapshot {
+  sector: string;
+  score: number;
+  rank: number;
+  sector_count: number;
+  average_relative_strength_score: number;
+  average_excess_return_50d_pct: number;
+  average_excess_return_120d_pct: number;
+}
+
+export interface EventRiskSnapshot {
+  earnings_date: string | null;
+  days_to_earnings: number | null;
+  risk_level: string;
+  ranking_penalty: number;
+}
+
 export interface BacktestStats {
   pattern: PatternType;
   total_trades: number;
@@ -75,6 +106,10 @@ export interface TradeSetup {
   confidence_reason: string;
   indicators: IndicatorSnapshot;
   relative_strength: RelativeStrengthSnapshot;
+  liquidity: LiquiditySnapshot;
+  accumulation: AccumulationSnapshot;
+  sector_strength: SectorStrengthSnapshot;
+  event_risk: EventRiskSnapshot;
   backtest: BacktestStats;
 }
 

@@ -8,7 +8,7 @@ services:
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: APP_RELEASE
-        value: mid-small-2000-2026-04-30-1
+        value: smart-filters-2026-04-30-1
       - key: PYTHON_VERSION
         value: 3.13.2
       - key: MARKET_DATA_PROVIDER
@@ -23,6 +23,18 @@ services:
         value: "60"
       - key: MARKET_DATA_MEMORY_CACHE_SYMBOLS
         value: "48"
+      - key: LIQUIDITY_FILTER_MIN_AVG_TRADED_VALUE_INR
+        value: "50000000"
+      - key: EVENT_RISK_REVIEW_LIMIT
+        value: "80"
+      - key: EVENT_RISK_WINDOW_DAYS
+        value: "7"
+      - key: EVENT_RISK_HIGH_PENALTY_DAYS
+        value: "3"
+      - key: EVENT_RISK_POST_RESULT_COOLOFF_DAYS
+        value: "2"
+      - key: EVENT_DATA_CACHE_TTL_MINUTES
+        value: "360"
       - key: ASYNC_SCAN_UNIVERSE_THRESHOLD
         value: "500"
       - key: BENCHMARK_SYMBOL

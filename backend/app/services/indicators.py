@@ -32,9 +32,16 @@ def apply_indicators(frame: pd.DataFrame) -> pd.DataFrame:
     enriched["atr14"] = true_range.ewm(alpha=1 / 14, adjust=False).mean()
 
     enriched["volume_avg20"] = enriched["Volume"].rolling(20).mean()
+    enriched["volume_avg50"] = enriched["Volume"].rolling(50).mean()
     enriched["volume_ratio"] = (
         enriched["Volume"] / enriched["volume_avg20"].replace(0, np.nan)
     ).fillna(1.0)
+    enriched["traded_value"] = enriched["Close"] * enriched["Volume"]
+    enriched["traded_value_avg20"] = enriched["traded_value"].rolling(20).mean()
+    enriched["traded_value_avg50"] = enriched["traded_value"].rolling(50).mean()
+    enriched["atr_pct"] = (
+        enriched["atr14"] / enriched["Close"].replace(0, np.nan)
+    ).fillna(0.0)
 
     enriched["rolling_high_20"] = enriched["High"].rolling(20).max()
     enriched["rolling_low_20"] = enriched["Low"].rolling(20).min()

@@ -3,27 +3,38 @@ from __future__ import annotations
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 
 from app.config import settings
 from app.schemas import (
+    AccumulationSnapshot,
     BacktestStats,
+    EventRiskSnapshot,
     IndicatorSnapshot,
+    LiquiditySnapshot,
     RelativeStrengthSnapshot,
     ScanRequest,
     ScanResponse,
     ScanUniverse,
+    SectorStrengthSnapshot,
     StockDetailResponse,
     TradeSetup,
 )
 from app.services.backtest import backtest_pattern
+from app.services.event_risk import YahooEventRiskProvider
 from app.services.indicators import apply_indicators
 from app.services.market_data import MarketDataError, create_market_data_provider
 from app.services.patterns import PatternMatch, detect_best_pattern
 from app.services.relative_strength import (
     RelativeStrengthContext,
     build_relative_strength_snapshot,
+)
+from app.services.selection_overlays import (
+    build_accumulation_snapshot,
+    build_liquidity_snapshot,
+    build_sector_observation,
+    build_sector_strength_map,
 )
 from app.services.store import signal_store
 from app.services.universe import (
@@ -40,6 +51,7 @@ logger = logging.getLogger(__name__)
 class TradeCandidate:
     listing: StockListing
     match: PatternMatch
+    reference_date: date
     current_price: float
     entry_price: float
     stop_loss: float
@@ -51,6 +63,10 @@ class TradeCandidate:
     expected_return_pct: float
     indicators: IndicatorSnapshot
     relative_strength: RelativeStrengthSnapshot
+    liquidity: LiquiditySnapshot
+    accumulation: AccumulationSnapshot
+    sector_strength: SectorStrengthSnapshot
+    event_risk: EventRiskSnapshot
     setup_state: str
 
 
@@ -66,6 +82,7 @@ class ActiveScanState:
 class ScannerService:
     def __init__(self) -> None:
         self.market_data = create_market_data_provider()
+        self.event_risk = YahooEventRiskProvider()
         self._active_scan: ActiveScanState | None = None
         self._active_scan_lock = threading.Lock()
 
@@ -127,6 +144,7 @@ class ScannerService:
     ) -> ScanResponse:
         benchmark_context = self._load_benchmark_context(request.lookback_days)
         candidates = self._collect_candidates(listings, request, benchmark_context)
+        candidates = self._apply_candidate_overlays(candidates, request)
         candidates.sort(
             key=lambda candidate: (
                 candidate.ranking_score,
@@ -249,6 +267,11 @@ class ScannerService:
                 investment_amount=request.investment_amount,
                 relative_strength=relative_strength,
             )
+            if (
+                request.universe == ScanUniverse.MID_SMALL_2000_PLUS
+                and not candidate.liquidity.passes_filter
+            ):
+                return None
             if candidate.probability_score < request.min_probability:
                 return None
             if candidate.risk_reward_ratio < request.min_risk_reward:
@@ -275,6 +298,8 @@ class ScannerService:
         relative_strength: RelativeStrengthSnapshot,
     ) -> TradeCandidate:
         latest = frame.iloc[-1]
+        liquidity = build_liquidity_snapshot(frame)
+        accumulation = build_accumulation_snapshot(frame)
         current_price = float(latest["Close"])
         entry = round(max(current_price, match.trigger_price), 2)
         atr = float(latest["atr14"])
@@ -290,6 +315,15 @@ class ScannerService:
             0.92,
             round(probability + max(-0.04, (relative_strength.score - 0.5) * 0.18), 3),
         )
+        probability = min(
+            0.95,
+            round(
+                probability
+                + max(-0.03, (accumulation.score - 0.5) * 0.08)
+                + max(-0.02, (liquidity.score - 0.5) * 0.04),
+                3,
+            ),
+        )
         expected_return_pct = round(((target_price / entry) - 1) * 100, 2)
         expected_profit_amount = round(
             investment_amount * (expected_return_pct / 100) * probability,
@@ -299,6 +333,12 @@ class ScannerService:
             probability * 0.5
             + min(risk_reward / 3.0, 1.0) * 0.18
             + relative_strength.score * 0.32,
+            3,
+        )
+        ranking_score = round(
+            ranking_score
+            + accumulation.score * 0.08
+            + liquidity.score * 0.05,
             3,
         )
 
@@ -323,6 +363,7 @@ class ScannerService:
         return TradeCandidate(
             listing=listing,
             match=match,
+            reference_date=frame.index[-1].date(),
             current_price=round(current_price, 2),
             entry_price=round(entry, 2),
             stop_loss=stop_loss,
@@ -334,6 +375,10 @@ class ScannerService:
             expected_return_pct=expected_return_pct,
             indicators=indicators,
             relative_strength=relative_strength,
+            liquidity=liquidity,
+            accumulation=accumulation,
+            sector_strength=self._neutral_sector_strength(listing.sector),
+            event_risk=self._neutral_event_risk(),
             setup_state=setup_state,
         )
 
@@ -365,14 +410,9 @@ class ScannerService:
                 average_target_sessions=None,
             )
 
-        if "enriched" in locals():
-            reference_date = enriched.index[-1].date()
-        else:
-            reference_date = datetime.now(UTC).date()
-
         estimated_target_sessions = self._estimate_target_sessions(candidate, backtest)
         estimated_target_date = self._project_target_date(
-            reference_date,
+            candidate.reference_date,
             estimated_target_sessions,
         )
 
@@ -380,6 +420,26 @@ class ScannerService:
             f" Relative strength vs {candidate.relative_strength.benchmark_name}: "
             f"{candidate.relative_strength.excess_return_50d_pct:+.1f}% over 50 sessions "
             f"and {candidate.relative_strength.excess_return_120d_pct:+.1f}% over 120 sessions."
+        )
+        liquidity_note = (
+            f" Liquidity: average traded value is "
+            f"{candidate.liquidity.average_traded_value_20d_cr:.1f} Cr over 20 sessions."
+        )
+        sector_note = (
+            f" Sector rank: {candidate.sector_strength.rank}/{candidate.sector_strength.sector_count} "
+            f"with sector strength score {candidate.sector_strength.score:.2f}."
+        )
+        accumulation_note = (
+            f" Accumulation score: {candidate.accumulation.score:.2f} with "
+            f"{candidate.accumulation.closes_near_high_10d} strong closes near highs in the last 10 sessions."
+        )
+        event_note = (
+            f" Earnings risk: {candidate.event_risk.risk_level}"
+            + (
+                f", {candidate.event_risk.days_to_earnings} days to results."
+                if candidate.event_risk.days_to_earnings is not None
+                else ", upcoming results date unavailable."
+            )
         )
         timing_note = (
             f" Estimated target window: about {estimated_target_sessions} trading sessions, "
@@ -389,11 +449,12 @@ class ScannerService:
         reason = (
             f"{candidate.match.explanation} Backtest win rate: {backtest.win_rate:.0%} across "
             f"{backtest.total_trades} historical occurrences.{candidate.setup_state}"
-            f"{timing_note}{rs_note}"
+            f"{timing_note}{rs_note}{sector_note}{liquidity_note}{accumulation_note}{event_note}"
             if backtest.total_trades
             else (
                 f"{candidate.match.explanation} Historical sample is still sparse."
-                f"{candidate.setup_state}{timing_note}{rs_note}"
+                f"{candidate.setup_state}{timing_note}{rs_note}{sector_note}"
+                f"{liquidity_note}{accumulation_note}{event_note}"
             )
         )
 
@@ -417,6 +478,10 @@ class ScannerService:
             confidence_reason=reason,
             indicators=candidate.indicators,
             relative_strength=candidate.relative_strength,
+            liquidity=candidate.liquidity,
+            accumulation=candidate.accumulation,
+            sector_strength=candidate.sector_strength,
+            event_risk=candidate.event_risk,
             backtest=backtest,
         )
 
@@ -436,6 +501,147 @@ class ScannerService:
         ):
             score += 0.04
         return round(min(score, 0.88), 3)
+
+    def _apply_candidate_overlays(
+        self,
+        candidates: list[TradeCandidate],
+        request: ScanRequest,
+    ) -> list[TradeCandidate]:
+        if not candidates:
+            return []
+
+        sector_map = build_sector_strength_map(
+            [
+                build_sector_observation(
+                    candidate.listing.sector,
+                    candidate.relative_strength,
+                    candidate.liquidity,
+                    candidate.accumulation,
+                )
+                for candidate in candidates
+            ]
+        )
+
+        enriched = [
+            replace(
+                candidate,
+                sector_strength=sector_map.get(
+                    candidate.listing.sector,
+                    self._neutral_sector_strength(candidate.listing.sector),
+                ),
+            )
+            for candidate in candidates
+        ]
+
+        if request.universe != ScanUniverse.MID_SMALL_2000_PLUS:
+            return enriched
+
+        advanced = [self._apply_advanced_discovery_score(candidate) for candidate in enriched]
+        return self._apply_event_risk_overlay(advanced)
+
+    def _apply_advanced_discovery_score(
+        self,
+        candidate: TradeCandidate,
+    ) -> TradeCandidate:
+        probability_score = round(
+            min(
+                0.95,
+                max(
+                    0.4,
+                    candidate.probability_score
+                    + (candidate.sector_strength.score - 0.5) * 0.12
+                    + (candidate.accumulation.score - 0.5) * 0.08
+                    + (candidate.liquidity.score - 0.5) * 0.05,
+                ),
+            ),
+            3,
+        )
+        ranking_score = round(
+            candidate.ranking_score
+            + (candidate.sector_strength.score - 0.5) * 0.28
+            + (candidate.accumulation.score - 0.5) * 0.16
+            + (candidate.liquidity.score - 0.5) * 0.08,
+            3,
+        )
+        expected_profit_amount = round(
+            candidate.expected_profit_amount
+            * (probability_score / max(candidate.probability_score, 0.01)),
+            2,
+        )
+        return replace(
+            candidate,
+            probability_score=probability_score,
+            ranking_score=ranking_score,
+            expected_profit_amount=expected_profit_amount,
+        )
+
+    def _apply_event_risk_overlay(
+        self,
+        candidates: list[TradeCandidate],
+    ) -> list[TradeCandidate]:
+        if not candidates:
+            return []
+
+        sorted_candidates = sorted(
+            candidates,
+            key=lambda candidate: (
+                candidate.ranking_score,
+                candidate.expected_profit_amount,
+            ),
+            reverse=True,
+        )
+        review_limit = min(len(sorted_candidates), settings.event_risk_review_limit)
+        reviewed: dict[str, TradeCandidate] = {}
+
+        for candidate in sorted_candidates[:review_limit]:
+            event_risk = self.event_risk.get_snapshot(
+                candidate.listing.symbol,
+                candidate.reference_date,
+            )
+            probability_score = round(
+                max(0.35, candidate.probability_score - event_risk.ranking_penalty * 0.35),
+                3,
+            )
+            ranking_score = round(
+                candidate.ranking_score - event_risk.ranking_penalty,
+                3,
+            )
+            expected_profit_amount = round(
+                candidate.expected_profit_amount
+                * (probability_score / max(candidate.probability_score, 0.01)),
+                2,
+            )
+            reviewed[candidate.listing.symbol.upper()] = replace(
+                candidate,
+                probability_score=probability_score,
+                ranking_score=ranking_score,
+                expected_profit_amount=expected_profit_amount,
+                event_risk=event_risk,
+            )
+
+        return [
+            reviewed.get(candidate.listing.symbol.upper(), candidate)
+            for candidate in candidates
+        ]
+
+    def _neutral_sector_strength(self, sector: str) -> SectorStrengthSnapshot:
+        return SectorStrengthSnapshot(
+            sector=sector,
+            score=0.5,
+            rank=1,
+            sector_count=1,
+            average_relative_strength_score=0.5,
+            average_excess_return_50d_pct=0.0,
+            average_excess_return_120d_pct=0.0,
+        )
+
+    def _neutral_event_risk(self) -> EventRiskSnapshot:
+        return EventRiskSnapshot(
+            earnings_date=None,
+            days_to_earnings=None,
+            risk_level="unknown",
+            ranking_penalty=0.0,
+        )
 
     def _load_benchmark_context(
         self,
@@ -619,6 +825,7 @@ class ScannerService:
                 signal_store.finish_scan()
 
     def _finish_incremental_scan(self, state: ActiveScanState) -> None:
+        state.candidates = self._apply_candidate_overlays(state.candidates, state.request)
         state.candidates.sort(
             key=lambda candidate: (
                 candidate.ranking_score,

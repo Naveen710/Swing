@@ -136,6 +136,110 @@ export function StockDetailShell({ symbol }: { symbol: string }) {
       ) : null}
 
       {signal ? (
+        <section className="detail-grid">
+          <article className="panel">
+            <h2>Liquidity filter</h2>
+            <div className="metric-grid">
+              <Metric
+                label="20D traded value"
+                value={`${signal.liquidity.average_traded_value_20d_cr.toFixed(1)} Cr`}
+              />
+              <Metric
+                label="50D traded value"
+                value={`${signal.liquidity.average_traded_value_50d_cr.toFixed(1)} Cr`}
+              />
+              <Metric
+                label="Liquidity score"
+                value={`${Math.round(signal.liquidity.score * 100)}`}
+              />
+              <Metric
+                label="Filter status"
+                value={signal.liquidity.passes_filter ? "Pass" : "Watch"}
+              />
+            </div>
+          </article>
+
+          <article className="panel">
+            <h2>Accumulation quality</h2>
+            <div className="metric-grid">
+              <Metric
+                label="Accumulation score"
+                value={`${Math.round(signal.accumulation.score * 100)}`}
+              />
+              <Metric
+                label="Up/down volume"
+                value={signal.accumulation.up_volume_ratio_10d.toFixed(2)}
+              />
+              <Metric
+                label="ATR contraction"
+                value={signal.accumulation.atr_contraction_ratio.toFixed(2)}
+              />
+              <Metric
+                label="High closes (10D)"
+                value={`${signal.accumulation.closes_near_high_10d}`}
+              />
+            </div>
+          </article>
+        </section>
+      ) : null}
+
+      {signal ? (
+        <section className="detail-grid">
+          <article className="panel">
+            <h2>Sector leadership</h2>
+            <div className="metric-grid">
+              <Metric
+                label="Sector rank"
+                value={`${signal.sector_strength.rank}/${signal.sector_strength.sector_count}`}
+              />
+              <Metric
+                label="Sector score"
+                value={`${Math.round(signal.sector_strength.score * 100)}`}
+              />
+              <Metric
+                label="Avg sector 50D excess"
+                value={formatSignedPct(signal.sector_strength.average_excess_return_50d_pct)}
+              />
+              <Metric
+                label="Avg sector 120D excess"
+                value={formatSignedPct(signal.sector_strength.average_excess_return_120d_pct)}
+              />
+            </div>
+          </article>
+
+          <article className="panel">
+            <h2>Event risk</h2>
+            <div className="metric-grid">
+              <Metric
+                label="Risk level"
+                value={capitalize(signal.event_risk.risk_level)}
+              />
+              <Metric
+                label="Days to earnings"
+                value={
+                  signal.event_risk.days_to_earnings !== null
+                    ? `${signal.event_risk.days_to_earnings}`
+                    : "Unknown"
+                }
+              />
+              <Metric
+                label="Earnings date"
+                value={
+                  signal.event_risk.earnings_date
+                    ? formatDate(signal.event_risk.earnings_date)
+                    : "Unknown"
+                }
+              />
+              <Metric
+                label="Ranking penalty"
+                value={signal.event_risk.ranking_penalty.toFixed(2)}
+              />
+            </div>
+          </article>
+        </section>
+      ) : null}
+
+      {signal ? (
         <section className="panel">
           <h2>Target timing</h2>
           <div className="metric-grid">
@@ -240,4 +344,8 @@ function formatDate(value: string) {
     month: "short",
     year: "numeric"
   }).format(new Date(value));
+}
+
+function capitalize(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }

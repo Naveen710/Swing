@@ -67,6 +67,37 @@ class RelativeStrengthSnapshot(BaseModel):
     excess_return_120d_pct: float
 
 
+class LiquiditySnapshot(BaseModel):
+    average_traded_value_20d_cr: float
+    average_traded_value_50d_cr: float
+    score: float
+    passes_filter: bool
+
+
+class AccumulationSnapshot(BaseModel):
+    score: float
+    up_volume_ratio_10d: float
+    atr_contraction_ratio: float
+    closes_near_high_10d: int
+
+
+class SectorStrengthSnapshot(BaseModel):
+    sector: str
+    score: float
+    rank: int
+    sector_count: int
+    average_relative_strength_score: float
+    average_excess_return_50d_pct: float
+    average_excess_return_120d_pct: float
+
+
+class EventRiskSnapshot(BaseModel):
+    earnings_date: date | None
+    days_to_earnings: int | None
+    risk_level: str
+    ranking_penalty: float
+
+
 class BacktestStats(BaseModel):
     pattern: PatternType
     total_trades: int
@@ -99,6 +130,10 @@ class TradeSetup(BaseModel):
     confidence_reason: str
     indicators: IndicatorSnapshot
     relative_strength: RelativeStrengthSnapshot
+    liquidity: LiquiditySnapshot
+    accumulation: AccumulationSnapshot
+    sector_strength: SectorStrengthSnapshot
+    event_risk: EventRiskSnapshot
     backtest: BacktestStats
 
 

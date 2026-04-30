@@ -36,12 +36,18 @@ export function OpportunitiesTable({ signals }: { signals: TradeSetup[] }) {
                   {signal.symbol}
                 </Link>
                 <div className="table-subtext">{signal.company_name}</div>
+                <div className="table-subtext">
+                  20D TV {signal.liquidity.average_traded_value_20d_cr.toFixed(1)} Cr
+                </div>
               </td>
               <td>{formatPattern(signal.pattern)}</td>
               <td>
                 {Math.round(signal.relative_strength.score * 100)}
                 <div className="table-subtext">
                   50D {formatSignedPct(signal.relative_strength.excess_return_50d_pct)}
+                </div>
+                <div className="table-subtext">
+                  Sector {signal.sector_strength.rank}/{signal.sector_strength.sector_count}
                 </div>
               </td>
               <td>{formatCurrency(signal.entry_price)}</td>
@@ -54,7 +60,12 @@ export function OpportunitiesTable({ signals }: { signals: TradeSetup[] }) {
                 </div>
               </td>
               <td>{signal.risk_reward_ratio.toFixed(2)}</td>
-              <td>{Math.round(signal.probability_score * 100)}%</td>
+              <td>
+                {Math.round(signal.probability_score * 100)}%
+                <div className="table-subtext">
+                  Event {formatRiskLabel(signal.event_risk.risk_level)}
+                </div>
+              </td>
               <td>{formatCurrency(signal.expected_profit_amount)}</td>
             </tr>
           ))}
@@ -90,4 +101,8 @@ function formatDate(value: string) {
     month: "short",
     year: "numeric"
   }).format(new Date(value));
+}
+
+function formatRiskLabel(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }

@@ -70,6 +70,20 @@ class Settings:
         os.getenv("DEFAULT_INVESTMENT_AMOUNT", "100000")
     )
     default_scan_lookback: int = int(os.getenv("DEFAULT_SCAN_LOOKBACK", "300"))
+    liquidity_filter_min_avg_traded_value_inr: float = float(
+        os.getenv("LIQUIDITY_FILTER_MIN_AVG_TRADED_VALUE_INR", "50000000")
+    )
+    event_risk_review_limit: int = int(os.getenv("EVENT_RISK_REVIEW_LIMIT", "80"))
+    event_risk_window_days: int = int(os.getenv("EVENT_RISK_WINDOW_DAYS", "7"))
+    event_risk_high_penalty_days: int = int(
+        os.getenv("EVENT_RISK_HIGH_PENALTY_DAYS", "3")
+    )
+    event_risk_post_result_cooloff_days: int = int(
+        os.getenv("EVENT_RISK_POST_RESULT_COOLOFF_DAYS", "2")
+    )
+    event_data_cache_ttl_minutes: int = int(
+        os.getenv("EVENT_DATA_CACHE_TTL_MINUTES", "360")
+    )
     market_data_provider: str = os.getenv("MARKET_DATA_PROVIDER", "auto").lower()
     universe_provider: str = _resolve_universe_provider()
     allow_demo_fallback: bool = os.getenv("ALLOW_DEMO_FALLBACK", "1") == "1"
