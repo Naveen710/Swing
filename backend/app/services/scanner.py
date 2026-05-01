@@ -22,6 +22,7 @@ from app.schemas import (
     TradeSetup,
 )
 from app.services.backtest import backtest_pattern
+from app.services.delivery_data import DeliveryTrend, NseDeliveryDataProvider
 from app.services.event_risk import YahooEventRiskProvider
 from app.services.indicators import apply_indicators
 from app.services.market_data import MarketDataError, create_market_data_provider
@@ -75,6 +76,7 @@ class ActiveScanState:
     request: ScanRequest
     listings: list[StockListing]
     benchmark_context: RelativeStrengthContext | None = None
+    delivery_trends: dict[str, DeliveryTrend] = field(default_factory=dict)
     candidates: list[TradeCandidate] = field(default_factory=list)
     cursor: int = 0
 
@@ -82,6 +84,7 @@ class ActiveScanState:
 class ScannerService:
     def __init__(self) -> None:
         self.market_data = create_market_data_provider()
+        self.delivery_data = NseDeliveryDataProvider()
         self.event_risk = YahooEventRiskProvider()
         self._active_scan: ActiveScanState | None = None
         self._active_scan_lock = threading.Lock()
@@ -143,7 +146,13 @@ class ScannerService:
         request: ScanRequest,
     ) -> ScanResponse:
         benchmark_context = self._load_benchmark_context(request.lookback_days)
-        candidates = self._collect_candidates(listings, request, benchmark_context)
+        delivery_trends = self._load_delivery_trends(benchmark_context)
+        candidates = self._collect_candidates(
+            listings,
+            request,
+            benchmark_context,
+            delivery_trends,
+        )
         candidates = self._apply_candidate_overlays(candidates, request)
         candidates.sort(
             key=lambda candidate: (
@@ -248,6 +257,7 @@ class ScannerService:
         listing: StockListing,
         request: ScanRequest,
         benchmark_context: RelativeStrengthContext | None,
+        delivery_trends: dict[str, DeliveryTrend],
     ) -> TradeCandidate | None:
         try:
             history = self.market_data.get_history(
@@ -266,6 +276,7 @@ class ScannerService:
                 match=match,
                 investment_amount=request.investment_amount,
                 relative_strength=relative_strength,
+                delivery_trends=delivery_trends,
             )
             if (
                 request.universe == ScanUniverse.MID_SMALL_2000_PLUS
@@ -296,10 +307,14 @@ class ScannerService:
         match: PatternMatch,
         investment_amount: int,
         relative_strength: RelativeStrengthSnapshot,
+        delivery_trends: dict[str, DeliveryTrend],
     ) -> TradeCandidate:
         latest = frame.iloc[-1]
         liquidity = build_liquidity_snapshot(frame)
-        accumulation = build_accumulation_snapshot(frame)
+        accumulation = build_accumulation_snapshot(
+            frame,
+            delivery_trend=delivery_trends.get(listing.symbol.upper()),
+        )
         current_price = float(latest["Close"])
         entry = round(max(current_price, match.trigger_price), 2)
         atr = float(latest["atr14"])
@@ -429,10 +444,7 @@ class ScannerService:
             f" Sector rank: {candidate.sector_strength.rank}/{candidate.sector_strength.sector_count} "
             f"with sector strength score {candidate.sector_strength.score:.2f}."
         )
-        accumulation_note = (
-            f" Accumulation score: {candidate.accumulation.score:.2f} with "
-            f"{candidate.accumulation.closes_near_high_10d} strong closes near highs in the last 10 sessions."
-        )
+        accumulation_note = self._build_accumulation_note(candidate.accumulation)
         event_note = (
             f" Earnings risk: {candidate.event_risk.risk_level}"
             + (
@@ -667,19 +679,49 @@ class ScannerService:
         )
         return None
 
+    def _load_delivery_trends(
+        self,
+        benchmark_context: RelativeStrengthContext | None,
+    ) -> dict[str, DeliveryTrend]:
+        reference_date = self._resolve_market_reference_date(benchmark_context)
+        try:
+            return self.delivery_data.get_recent_delivery_trends(reference_date)
+        except Exception as exc:
+            logger.warning(
+                "Unable to load recent NSE delivery data for %s. Falling back to proxy accumulation. %s",
+                reference_date,
+                exc,
+            )
+            return {}
+
+    def _resolve_market_reference_date(
+        self,
+        benchmark_context: RelativeStrengthContext | None,
+    ) -> date:
+        if benchmark_context is not None and not benchmark_context.benchmark_frame.empty:
+            return benchmark_context.benchmark_frame.index[-1].date()
+        return datetime.now(UTC).date()
+
     def _collect_candidates(
         self,
         listings: list[StockListing],
         request: ScanRequest,
         benchmark_context: RelativeStrengthContext | None,
+        delivery_trends: dict[str, DeliveryTrend],
     ) -> list[TradeCandidate]:
-        return self._scan_chunk(listings, request, benchmark_context)
+        return self._scan_chunk(
+            listings,
+            request,
+            benchmark_context,
+            delivery_trends,
+        )
 
     def _scan_chunk(
         self,
         listings: list[StockListing],
         request: ScanRequest,
         benchmark_context: RelativeStrengthContext | None,
+        delivery_trends: dict[str, DeliveryTrend],
     ) -> list[TradeCandidate]:
         self._prefetch_histories(listings, request.lookback_days)
         with ThreadPoolExecutor(
@@ -687,7 +729,12 @@ class ScannerService:
         ) as executor:
             results = list(
                 executor.map(
-                    lambda listing: self._scan_listing(listing, request, benchmark_context),
+                    lambda listing: self._scan_listing(
+                        listing,
+                        request,
+                        benchmark_context,
+                        delivery_trends,
+                    ),
                     listings,
                 )
             )
@@ -795,6 +842,10 @@ class ScannerService:
                     state.benchmark_context = self._load_benchmark_context(
                         state.request.lookback_days
                     )
+                if not state.delivery_trends:
+                    state.delivery_trends = self._load_delivery_trends(
+                        state.benchmark_context
+                    )
 
                 chunk_cap = 80 if len(state.listings) >= 2000 else 40
                 chunk_size = max(10, min(settings.yahoo_batch_size, chunk_cap))
@@ -808,6 +859,7 @@ class ScannerService:
                     chunk,
                     state.request,
                     state.benchmark_context,
+                    state.delivery_trends,
                 )
                 state.candidates.extend(results)
                 state.cursor += len(chunk)
@@ -848,6 +900,29 @@ class ScannerService:
             generated_at=generated_at,
             universe_size=len(state.listings),
             scanned_symbols=len(state.listings),
+        )
+
+    def _build_accumulation_note(
+        self,
+        accumulation: AccumulationSnapshot,
+    ) -> str:
+        base_note = (
+            f" Accumulation score: {accumulation.score:.2f} with "
+            f"{accumulation.closes_near_high_10d} strong closes near highs in the last 10 sessions."
+        )
+        if (
+            accumulation.source != "nse_delivery"
+            or accumulation.average_delivery_pct_10d is None
+            or accumulation.latest_delivery_pct is None
+        ):
+            return base_note + " Delivery quality is using the internal volume proxy."
+
+        return (
+            base_note
+            + f" NSE delivery confirms the move with a 10-session average of "
+            + f"{accumulation.average_delivery_pct_10d:.1f}%, latest delivery at "
+            + f"{accumulation.latest_delivery_pct:.1f}%, and "
+            + f"{accumulation.rising_delivery_days_10d} rising delivery sessions."
         )
 
 scanner_service = ScannerService()

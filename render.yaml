@@ -8,7 +8,7 @@ services:
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: APP_RELEASE
-        value: smart-filters-2026-04-30-1
+        value: nse-delivery-2026-05-01-1
       - key: PYTHON_VERSION
         value: 3.13.2
       - key: MARKET_DATA_PROVIDER
@@ -35,6 +35,12 @@ services:
         value: "2"
       - key: EVENT_DATA_CACHE_TTL_MINUTES
         value: "360"
+      - key: DELIVERY_DATA_CACHE_TTL_MINUTES
+        value: "1440"
+      - key: DELIVERY_DATA_SESSIONS
+        value: "10"
+      - key: NSE_DELIVERY_ARCHIVE_BASE_URL
+        value: https://archives.nseindia.com/archives/equities/mto
       - key: ASYNC_SCAN_UNIVERSE_THRESHOLD
         value: "500"
       - key: BENCHMARK_SYMBOL

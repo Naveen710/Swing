@@ -79,6 +79,10 @@ class AccumulationSnapshot(BaseModel):
     up_volume_ratio_10d: float
     atr_contraction_ratio: float
     closes_near_high_10d: int
+    average_delivery_pct_10d: float | None
+    latest_delivery_pct: float | None
+    rising_delivery_days_10d: int
+    source: str
 
 
 class SectorStrengthSnapshot(BaseModel):

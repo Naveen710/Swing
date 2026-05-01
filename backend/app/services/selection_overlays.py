@@ -12,6 +12,7 @@ from app.schemas import (
     RelativeStrengthSnapshot,
     SectorStrengthSnapshot,
 )
+from app.services.delivery_data import DeliveryTrend
 
 
 @dataclass(frozen=True)
@@ -50,7 +51,10 @@ def build_liquidity_snapshot(frame: pd.DataFrame) -> LiquiditySnapshot:
     )
 
 
-def build_accumulation_snapshot(frame: pd.DataFrame) -> AccumulationSnapshot:
+def build_accumulation_snapshot(
+    frame: pd.DataFrame,
+    delivery_trend: DeliveryTrend | None = None,
+) -> AccumulationSnapshot:
     recent = frame.tail(10).copy()
     if recent.empty:
         return AccumulationSnapshot(
@@ -58,6 +62,10 @@ def build_accumulation_snapshot(frame: pd.DataFrame) -> AccumulationSnapshot:
             up_volume_ratio_10d=1.0,
             atr_contraction_ratio=1.0,
             closes_near_high_10d=0,
+            average_delivery_pct_10d=None,
+            latest_delivery_pct=None,
+            rising_delivery_days_10d=0,
+            source="volume_proxy",
         )
 
     close_delta = recent["Close"].diff().fillna(0.0)
@@ -100,11 +108,42 @@ def build_accumulation_snapshot(frame: pd.DataFrame) -> AccumulationSnapshot:
     if float(recent["Close"].iloc[-1]) >= float(frame["rolling_high_20"].iloc[-1]) * 0.96:
         score += 0.08
 
+    average_delivery_pct = None
+    latest_delivery_pct = None
+    rising_delivery_days = 0
+    source = "volume_proxy"
+    if delivery_trend is not None and delivery_trend.session_count > 0:
+        average_delivery_pct = delivery_trend.average_delivery_pct_10d
+        latest_delivery_pct = delivery_trend.latest_delivery_pct
+        rising_delivery_days = delivery_trend.rising_delivery_days_10d
+        source = "nse_delivery"
+
+        if average_delivery_pct >= 45:
+            score += 0.2
+        elif average_delivery_pct >= 35:
+            score += 0.14
+        elif average_delivery_pct >= 25:
+            score += 0.08
+
+        if latest_delivery_pct >= average_delivery_pct + 5:
+            score += 0.08
+        elif latest_delivery_pct >= average_delivery_pct:
+            score += 0.04
+
+        if rising_delivery_days >= 6:
+            score += 0.08
+        elif rising_delivery_days >= 4:
+            score += 0.05
+
     return AccumulationSnapshot(
         score=round(min(score, 0.95), 3),
         up_volume_ratio_10d=round(up_volume_ratio, 2),
         atr_contraction_ratio=round(atr_contraction_ratio, 2),
         closes_near_high_10d=closes_near_high,
+        average_delivery_pct_10d=average_delivery_pct,
+        latest_delivery_pct=latest_delivery_pct,
+        rising_delivery_days_10d=rising_delivery_days,
+        source=source,
     )
 
 

@@ -39,6 +39,11 @@ export function OpportunitiesTable({ signals }: { signals: TradeSetup[] }) {
                 <div className="table-subtext">
                   20D TV {signal.liquidity.average_traded_value_20d_cr.toFixed(1)} Cr
                 </div>
+                <div className="table-subtext">
+                  {signal.accumulation.latest_delivery_pct !== null
+                    ? `Deliv ${signal.accumulation.latest_delivery_pct.toFixed(1)}%`
+                    : "Deliv proxy"}
+                </div>
               </td>
               <td>{formatPattern(signal.pattern)}</td>
               <td>

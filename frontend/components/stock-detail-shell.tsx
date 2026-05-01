@@ -178,6 +178,26 @@ export function StockDetailShell({ symbol }: { symbol: string }) {
                 label="High closes (10D)"
                 value={`${signal.accumulation.closes_near_high_10d}`}
               />
+              <Metric
+                label="Data source"
+                value={
+                  signal.accumulation.source === "nse_delivery"
+                    ? "NSE delivery"
+                    : "Volume proxy"
+                }
+              />
+              <Metric
+                label="Avg delivery (10D)"
+                value={formatOptionalPct(signal.accumulation.average_delivery_pct_10d)}
+              />
+              <Metric
+                label="Latest delivery"
+                value={formatOptionalPct(signal.accumulation.latest_delivery_pct)}
+              />
+              <Metric
+                label="Rising delivery days"
+                value={`${signal.accumulation.rising_delivery_days_10d}`}
+              />
             </div>
           </article>
         </section>
@@ -336,6 +356,13 @@ function formatCurrency(value: number) {
 function formatSignedPct(value: number) {
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(1)}%`;
+}
+
+function formatOptionalPct(value: number | null) {
+  if (value === null) {
+    return "Unavailable";
+  }
+  return `${value.toFixed(1)}%`;
 }
 
 function formatDate(value: string) {

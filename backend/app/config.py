@@ -84,6 +84,14 @@ class Settings:
     event_data_cache_ttl_minutes: int = int(
         os.getenv("EVENT_DATA_CACHE_TTL_MINUTES", "360")
     )
+    delivery_data_cache_ttl_minutes: int = int(
+        os.getenv("DELIVERY_DATA_CACHE_TTL_MINUTES", "1440")
+    )
+    delivery_data_sessions: int = int(os.getenv("DELIVERY_DATA_SESSIONS", "10"))
+    nse_delivery_archive_base_url: str = os.getenv(
+        "NSE_DELIVERY_ARCHIVE_BASE_URL",
+        "https://archives.nseindia.com/archives/equities/mto",
+    )
     market_data_provider: str = os.getenv("MARKET_DATA_PROVIDER", "auto").lower()
     universe_provider: str = _resolve_universe_provider()
     allow_demo_fallback: bool = os.getenv("ALLOW_DEMO_FALLBACK", "1") == "1"

@@ -55,6 +55,10 @@ export interface AccumulationSnapshot {
   up_volume_ratio_10d: number;
   atr_contraction_ratio: number;
   closes_near_high_10d: number;
+  average_delivery_pct_10d: number | null;
+  latest_delivery_pct: number | null;
+  rising_delivery_days_10d: number;
+  source: string;
 }
 
 export interface SectorStrengthSnapshot {
