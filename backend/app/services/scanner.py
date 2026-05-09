@@ -115,6 +115,7 @@ class ScannerService:
             refresh_started = self._start_incremental_scan(request, listings)
             (
                 generated_at,
+                cached_universe_size,
                 scanned_symbols,
                 cached_results,
             ) = signal_store.snapshot(
@@ -129,7 +130,11 @@ class ScannerService:
                 universe_size = len(listings)
             else:
                 scanned_symbols = status_scanned_symbols
-                universe_size = status_universe_size or len(listings)
+                universe_size = (
+                    status_universe_size
+                    or cached_universe_size
+                    or len(listings)
+                )
             return ScanResponse(
                 universe=request.universe,
                 generated_at=generated_at or datetime.now(UTC),
