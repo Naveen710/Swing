@@ -137,7 +137,7 @@ services:
       - key: EMAIL_SMTP_STARTTLS
         value: "1"
       - key: EMAIL_REPORT_RECIPIENTS
-        value: naveeneggadi@gmail.com
+        value: naveeneggadi@gmail.com,praveeneggadi044@gmail.com
       - key: EMAIL_FROM_ADDRESS
         sync: false
       - key: EMAIL_SMTP_USERNAME

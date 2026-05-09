@@ -108,8 +108,7 @@ def send_daily_email_report(
         if settings.email_smtp_starttls:
             smtp.starttls()
             smtp.ehlo()
-        if settings.email_smtp_username:
-            smtp.login(settings.email_smtp_username, settings.email_smtp_password)
+        smtp.login(settings.email_smtp_username, settings.email_smtp_password)
         smtp.send_message(message)
 
     return subject, text_body, html_body
@@ -206,4 +205,4 @@ def _render_signal_html(signal: TradeSetup) -> str:
 
 
 def _format_currency(value: float) -> str:
-    return f"₹{value:,.2f}"
+    return f"INR {value:,.2f}"
