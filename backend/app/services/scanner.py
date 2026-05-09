@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 
@@ -75,6 +75,7 @@ class TradeCandidate:
 class ActiveScanState:
     request: ScanRequest
     listings: list[StockListing]
+    worker_count: int
     benchmark_context: RelativeStrengthContext | None = None
     delivery_trends: dict[str, DeliveryTrend] = field(default_factory=dict)
     candidates: list[TradeCandidate] = field(default_factory=list)
@@ -214,7 +215,6 @@ class ScannerService:
         return signal_store.all(universe=universe)
 
     def scan_status(self):
-        self._advance_incremental_scan()
         (
             universe,
             scan_in_progress,
@@ -742,6 +742,7 @@ class ScannerService:
             request,
             benchmark_context,
             delivery_trends,
+            worker_count=self._resolve_worker_count(request, len(listings)),
         )
 
     def _scan_chunk(
@@ -750,10 +751,14 @@ class ScannerService:
         request: ScanRequest,
         benchmark_context: RelativeStrengthContext | None,
         delivery_trends: dict[str, DeliveryTrend],
+        worker_count: int | None = None,
     ) -> list[TradeCandidate]:
         self._prefetch_histories(listings, request.lookback_days)
         with ThreadPoolExecutor(
-            max_workers=max(1, min(settings.scan_workers, len(listings)))
+            max_workers=max(
+                1,
+                min(worker_count or settings.scan_workers, len(listings)),
+            )
         ) as executor:
             results = list(
                 executor.map(
@@ -856,53 +861,125 @@ class ScannerService:
             self._active_scan = ActiveScanState(
                 request=request,
                 listings=listings,
+                worker_count=self._resolve_worker_count(request, len(listings)),
             )
+            threading.Thread(
+                target=self._run_async_scan,
+                args=(self._active_scan,),
+                daemon=True,
+                name=f"scan-{request.universe.value}",
+            ).start()
             return True
 
-    def _advance_incremental_scan(self) -> None:
-        with self._active_scan_lock:
-            state = self._active_scan
-            if state is None:
-                return
-
-            try:
-                if state.benchmark_context is None:
-                    state.benchmark_context = self._load_benchmark_context(
-                        state.request.lookback_days
-                    )
-                if not state.delivery_trends:
-                    state.delivery_trends = self._load_delivery_trends(
-                        state.benchmark_context
-                    )
-
-                chunk_cap = 80 if len(state.listings) >= 2000 else 40
-                chunk_size = max(10, min(settings.yahoo_batch_size, chunk_cap))
-                chunk = state.listings[state.cursor : state.cursor + chunk_size]
-                if not chunk:
-                    self._finish_incremental_scan(state)
+    def _run_async_scan(self, state: ActiveScanState) -> None:
+        try:
+            state.benchmark_context = self._load_benchmark_context(
+                state.request.lookback_days
+            )
+            state.delivery_trends = self._load_delivery_trends(
+                state.benchmark_context
+            )
+            state.candidates = self._scan_with_parallel_workers(state)
+            state.cursor = len(state.listings)
+            self._finish_incremental_scan(state)
+        except Exception as exc:
+            logger.exception("Background async scan failed. %s", exc)
+            signal_store.finish_scan()
+        finally:
+            with self._active_scan_lock:
+                if self._active_scan is state:
                     self._active_scan = None
-                    return
 
-                results = self._scan_chunk(
-                    chunk,
+    def _scan_with_parallel_workers(self, state: ActiveScanState) -> list[TradeCandidate]:
+        listings = state.listings
+        if not listings:
+            return []
+
+        worker_count = max(1, min(state.worker_count, len(listings)))
+        if worker_count == 1:
+            return self._scan_partition(
+                listings,
+                state.request,
+                state.benchmark_context,
+                state.delivery_trends,
+                total_listings=len(listings),
+            )
+
+        partitions = self._partition_listings(listings, worker_count)
+        candidates: list[TradeCandidate] = []
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            futures = [
+                executor.submit(
+                    self._scan_partition,
+                    partition,
                     state.request,
                     state.benchmark_context,
                     state.delivery_trends,
+                    len(listings),
                 )
-                state.candidates.extend(results)
-                state.cursor += len(chunk)
-                signal_store.update_progress(
-                    scanned_symbols=state.cursor,
-                    universe_size=len(state.listings),
-                )
+                for partition in partitions
+                if partition
+            ]
+            for future in as_completed(futures):
+                candidates.extend(future.result())
+        return candidates
 
-                if state.cursor >= len(state.listings):
-                    self._finish_incremental_scan(state)
-                    self._active_scan = None
-            except Exception as exc:
-                logger.exception("Incremental scan step failed. %s", exc)
-                self._active_scan = None
-                signal_store.finish_scan()
+    def _scan_partition(
+        self,
+        listings: list[StockListing],
+        request: ScanRequest,
+        benchmark_context: RelativeStrengthContext | None,
+        delivery_trends: dict[str, DeliveryTrend],
+        total_listings: int,
+    ) -> list[TradeCandidate]:
+        self._prefetch_histories(listings, request.lookback_days)
+        local_candidates: list[TradeCandidate] = []
+        for listing in listings:
+            candidate = self._scan_listing(
+                listing,
+                request,
+                benchmark_context,
+                delivery_trends,
+            )
+            if candidate is not None:
+                local_candidates.append(candidate)
+            with self._active_scan_lock:
+                active_state = self._active_scan
+                if active_state is not None:
+                    active_state.cursor += 1
+                    scanned_symbols = active_state.cursor
+                else:
+                    scanned_symbols = 0
+            signal_store.update_progress(
+                scanned_symbols=scanned_symbols,
+                universe_size=total_listings,
+            )
+        return local_candidates
+
+    def _partition_listings(
+        self,
+        listings: list[StockListing],
+        worker_count: int,
+    ) -> list[list[StockListing]]:
+        partitions: list[list[StockListing]] = []
+        start = 0
+        for worker_index in range(worker_count):
+            remaining = len(listings) - start
+            workers_left = worker_count - worker_index
+            current_size = max(1, remaining // workers_left)
+            partitions.append(listings[start : start + current_size])
+            start += current_size
+        return partitions
+
+    def _resolve_worker_count(
+        self,
+        request: ScanRequest,
+        listing_count: int,
+    ) -> int:
+        base_workers = settings.scan_workers
+        if request.universe == ScanUniverse.MID_SMALL_2000_PLUS:
+            base_workers = settings.mid_small_parallel_workers
+        return max(1, min(base_workers, listing_count))
 
     def _finish_incremental_scan(self, state: ActiveScanState) -> None:
         state.candidates = self._apply_candidate_overlays(state.candidates, state.request)

@@ -57,7 +57,7 @@ export function DashboardShell() {
         setScanNotice(
           latestSignals.length
             ? `Showing the latest saved opportunities while a fresh ${formatUniverseLabel(activeUniverse)} scan runs in the background.`
-            : `Scanning ${status.scanned_symbols} of ${status.universe_size} ${formatUniverseLabel(activeUniverse)} stocks. Click Refresh results to pull the newest saved board.`
+            : `Scanning ${status.scanned_symbols} of ${status.universe_size} ${formatUniverseLabel(activeUniverse)} stocks${activeUniverse === "mid_small_2000_plus" ? " with 10 parallel workers" : ""}. Click Refresh results to pull the newest saved board.`
         );
       } else if (!options?.silent) {
         setScanNotice(
@@ -129,7 +129,7 @@ export function DashboardShell() {
         }
 
         setScanNotice(
-          `Scanning ${status.scanned_symbols} of ${status.universe_size} ${formatUniverseLabel(statusUniverse)} stocks. The board will refresh automatically when the run finishes.`
+          `Scanning ${status.scanned_symbols} of ${status.universe_size} ${formatUniverseLabel(statusUniverse)} stocks${statusUniverse === "mid_small_2000_plus" ? " with 10 parallel workers" : ""}. The board will refresh automatically when the run finishes.`
         );
       } catch {
         if (cancelled) {
@@ -194,7 +194,7 @@ export function DashboardShell() {
               response.refresh_started && response.results.length
                 ? `Showing the latest saved opportunities while a fresh ${formatUniverseLabel(universe)} scan runs in the background.`
                 : response.refresh_started
-                  ? `${formatUniverseLabel(universe)} scan started in the background. Use Refresh results any time to pull the latest saved board.`
+                  ? `${formatUniverseLabel(universe)} scan started in the background${universe === "mid_small_2000_plus" ? " with 10 parallel workers" : ""}. Use Refresh results any time to pull the latest saved board.`
                   : "Another scan is already running. Use Refresh results to pull the latest saved board."
             );
           } else if (!response.results.length) {

@@ -58,6 +58,11 @@ holding the HTTP request open. When the universe size crosses
 latest cached results and the frontend polls `GET /api/scan/status` until the
 fresh scan is done.
 
+The `Mid & Small 2000+` universe now fans out into `MID_SMALL_PARALLEL_WORKERS`
+parallel background workers by default. The Render blueprint sets that to `10`
+so the broad discovery scan starts 10 worker partitions as soon as the button
+is clicked.
+
 To keep small hosted instances stable, the Yahoo provider also caps its
 in-process dataframe cache with `MARKET_DATA_MEMORY_CACHE_SYMBOLS` instead of
 retaining the whole exchange universe in RAM.

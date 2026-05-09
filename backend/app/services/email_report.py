@@ -134,6 +134,7 @@ def _render_universe_text(report: UniverseReport) -> list[str]:
         f"{report.label}",
         f"Universe size: {report.response.universe_size}",
         f"Ranked results: {len(report.response.results)}",
+        f"Execution: {_describe_execution(report.universe)}",
     ]
     if not report.response.results:
         lines.extend(
@@ -144,7 +145,10 @@ def _render_universe_text(report: UniverseReport) -> list[str]:
         )
         return lines
 
-    header = "Stock | Pattern | Entry | Stop | Target | Prob | RR | ETA"
+    header = (
+        "Stock | Sector | Pattern | Entry | Stop | Target | Prob | RR | ETA | "
+        "Expected Profit | RS | Liquidity20D | Event"
+    )
     lines.extend([header, "-" * len(header)])
     for signal in report.response.results:
         lines.append(_render_signal_text(signal))
@@ -156,7 +160,8 @@ def _render_universe_html(report: UniverseReport) -> str:
     header = (
         f"<h3>{escape(report.label)}</h3>"
         f"<p><strong>Universe size:</strong> {report.response.universe_size}"
-        f" &nbsp; <strong>Ranked results:</strong> {len(report.response.results)}</p>"
+        f" &nbsp; <strong>Ranked results:</strong> {len(report.response.results)}"
+        f" &nbsp; <strong>Execution:</strong> {escape(_describe_execution(report.universe))}</p>"
     )
     if not report.response.results:
         return header + "<p>No opportunities matched the configured filters.</p>"
@@ -166,8 +171,9 @@ def _render_universe_html(report: UniverseReport) -> str:
         header
         + "<table border='1' cellpadding='6' cellspacing='0' style='border-collapse:collapse;'>"
         + "<thead><tr>"
-        + "<th>Stock</th><th>Pattern</th><th>Entry</th><th>Stop</th><th>Target</th>"
-        + "<th>Probability</th><th>R:R</th><th>Target ETA</th>"
+        + "<th>Stock</th><th>Sector</th><th>Pattern</th><th>Entry</th><th>Stop</th><th>Target</th>"
+        + "<th>Probability</th><th>R:R</th><th>Target ETA</th><th>Expected Profit</th>"
+        + "<th>RS</th><th>Liquidity 20D</th><th>Event</th>"
         + "</tr></thead><tbody>"
         + rows
         + "</tbody></table>"
@@ -178,6 +184,7 @@ def _render_signal_text(signal: TradeSetup) -> str:
     return " | ".join(
         [
             signal.symbol,
+            signal.sector,
             signal.pattern.value.replace("_", " ").title(),
             _format_currency(signal.entry_price),
             _format_currency(signal.stop_loss),
@@ -185,6 +192,10 @@ def _render_signal_text(signal: TradeSetup) -> str:
             f"{round(signal.probability_score * 100)}%",
             f"{signal.risk_reward_ratio:.2f}",
             f"{signal.estimated_target_sessions} sessions ({signal.estimated_target_date.isoformat()})",
+            _format_currency(signal.expected_profit_amount),
+            f"{round(signal.relative_strength.score * 100)}",
+            f"{signal.liquidity.average_traded_value_20d_cr:.1f} Cr",
+            signal.event_risk.risk_level.title(),
         ]
     )
 
@@ -193,6 +204,7 @@ def _render_signal_html(signal: TradeSetup) -> str:
     return (
         "<tr>"
         + f"<td>{escape(signal.symbol)}</td>"
+        + f"<td>{escape(signal.sector)}</td>"
         + f"<td>{escape(signal.pattern.value.replace('_', ' ').title())}</td>"
         + f"<td>{escape(_format_currency(signal.entry_price))}</td>"
         + f"<td>{escape(_format_currency(signal.stop_loss))}</td>"
@@ -200,9 +212,19 @@ def _render_signal_html(signal: TradeSetup) -> str:
         + f"<td>{round(signal.probability_score * 100)}%</td>"
         + f"<td>{signal.risk_reward_ratio:.2f}</td>"
         + f"<td>{signal.estimated_target_sessions} sessions ({escape(signal.estimated_target_date.isoformat())})</td>"
+        + f"<td>{escape(_format_currency(signal.expected_profit_amount))}</td>"
+        + f"<td>{round(signal.relative_strength.score * 100)}</td>"
+        + f"<td>{signal.liquidity.average_traded_value_20d_cr:.1f} Cr</td>"
+        + f"<td>{escape(signal.event_risk.risk_level.title())}</td>"
         + "</tr>"
     )
 
 
 def _format_currency(value: float) -> str:
     return f"INR {value:,.2f}"
+
+
+def _describe_execution(universe: ScanUniverse) -> str:
+    if universe == ScanUniverse.MID_SMALL_2000_PLUS:
+        return f"{settings.mid_small_parallel_workers} parallel workers"
+    return f"{settings.scan_workers} parallel workers"

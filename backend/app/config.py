@@ -70,6 +70,9 @@ class Settings:
     )
     api_prefix: str = "/api"
     scan_workers: int = int(os.getenv("SCAN_WORKERS", "8"))
+    mid_small_parallel_workers: int = int(
+        os.getenv("MID_SMALL_PARALLEL_WORKERS", "10")
+    )
     async_scan_universe_threshold: int = int(
         os.getenv("ASYNC_SCAN_UNIVERSE_THRESHOLD", "500")
     )
