@@ -40,8 +40,9 @@ export function getStocks(universe: ScanUniverse): Promise<StockSummary[]> {
   return request<StockSummary[]>(`/stocks?universe=${encodeURIComponent(universe)}`);
 }
 
-export function getLatestSignals(): Promise<TradeSetup[]> {
-  return request<TradeSetup[]>("/signals");
+export function getLatestSignals(universe?: ScanUniverse): Promise<TradeSetup[]> {
+  const query = universe ? `?universe=${encodeURIComponent(universe)}` : "";
+  return request<TradeSetup[]>(`/signals${query}`);
 }
 
 export function runScan(payload: ScanPayload): Promise<ScanResponse> {

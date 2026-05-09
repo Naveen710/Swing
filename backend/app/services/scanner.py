@@ -114,23 +114,26 @@ class ScannerService:
         if self._should_run_async(listings, request):
             refresh_started = self._start_incremental_scan(request, listings)
             (
-                cached_universe,
                 generated_at,
-                universe_size,
                 scanned_symbols,
                 cached_results,
             ) = signal_store.snapshot(
+                request.universe,
                 request.max_results
             )
-            if cached_universe != request.universe:
-                cached_results = []
-                generated_at = None
-                universe_size = len(listings)
+            status_universe, _, _, status_universe_size, status_scanned_symbols, _ = (
+                signal_store.status()
+            )
+            if status_universe != request.universe:
                 scanned_symbols = 0
+                universe_size = len(listings)
+            else:
+                scanned_symbols = status_scanned_symbols
+                universe_size = status_universe_size or len(listings)
             return ScanResponse(
                 universe=request.universe,
                 generated_at=generated_at or datetime.now(UTC),
-                universe_size=universe_size or len(listings),
+                universe_size=universe_size,
                 scanned_symbols=scanned_symbols,
                 results=cached_results,
                 from_cache=bool(cached_results),
@@ -182,8 +185,11 @@ class ScannerService:
             results=limited,
         )
 
-    def latest_signals(self) -> list[TradeSetup]:
-        return signal_store.all()
+    def latest_signals(
+        self,
+        universe: ScanUniverse | None = None,
+    ) -> list[TradeSetup]:
+        return signal_store.all(universe=universe)
 
     def scan_status(self):
         self._advance_incremental_scan()

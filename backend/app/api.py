@@ -28,8 +28,8 @@ def list_stocks(universe: ScanUniverse = ScanUniverse.NIFTY500) -> list[dict[str
 
 
 @router.get("/signals")
-def latest_signals():
-    return scanner_service.latest_signals()
+def latest_signals(universe: ScanUniverse | None = None):
+    return scanner_service.latest_signals(universe=universe)
 
 
 @router.post("/scan")

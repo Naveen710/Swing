@@ -2,16 +2,24 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from app.schemas import ScanUniverse, TradeSetup
 
 
+@dataclass
+class SignalSnapshot:
+    signals: list[TradeSetup] = field(default_factory=list)
+    generated_at: datetime | None = None
+    universe_size: int = 0
+    scanned_symbols: int = 0
+
+
 class SignalStore:
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._signals: list[TradeSetup] = []
-        self._generated_at: datetime | None = None
+        self._snapshots: dict[ScanUniverse, SignalSnapshot] = {}
         self._universe_size = 0
         self._scanned_symbols = 0
         self._scan_in_progress = False
@@ -27,41 +35,71 @@ class SignalStore:
         scanned_symbols: int,
     ) -> None:
         with self._lock:
-            self._signals = list(signals)
+            self._snapshots[universe] = SignalSnapshot(
+                signals=list(signals),
+                generated_at=generated_at,
+                universe_size=universe_size,
+                scanned_symbols=scanned_symbols,
+            )
             self._universe = universe
-            self._generated_at = generated_at
             self._universe_size = universe_size
             self._scanned_symbols = scanned_symbols
             self._scan_in_progress = False
 
-    def all(self) -> list[TradeSetup]:
+    def all(self, universe: ScanUniverse | None = None) -> list[TradeSetup]:
         with self._lock:
-            return list(self._signals)
+            snapshot = self._select_snapshot(universe)
+            if snapshot is None:
+                return []
+            return list(snapshot.signals)
 
     def find(self, symbol: str) -> TradeSetup | None:
         symbol_upper = symbol.upper()
         with self._lock:
-            return next(
-                (signal for signal in self._signals if signal.symbol.upper() == symbol_upper),
-                None,
+            ordered_snapshots = sorted(
+                (
+                    snapshot
+                    for snapshot in self._snapshots.values()
+                    if snapshot.generated_at is not None
+                ),
+                key=lambda snapshot: snapshot.generated_at or datetime.min.replace(tzinfo=UTC),
+                reverse=True,
             )
+            for snapshot in ordered_snapshots:
+                match = next(
+                    (
+                        signal
+                        for signal in snapshot.signals
+                        if signal.symbol.upper() == symbol_upper
+                    ),
+                    None,
+                )
+                if match is not None:
+                    return match
+            return None
 
-    def snapshot(self, max_results: int | None = None) -> tuple[
-        ScanUniverse | None,
+    def snapshot(
+        self,
+        universe: ScanUniverse,
+        max_results: int | None = None,
+    ) -> tuple[
         datetime | None,
         int,
         int,
         list[TradeSetup],
     ]:
         with self._lock:
-            signals = list(self._signals)
+            snapshot = self._snapshots.get(universe)
+            if snapshot is None:
+                return (None, 0, 0, [])
+
+            signals = list(snapshot.signals)
             if max_results is not None:
                 signals = signals[:max_results]
             return (
-                self._universe,
-                self._generated_at,
-                self._universe_size,
-                self._scanned_symbols,
+                snapshot.generated_at,
+                snapshot.universe_size,
+                snapshot.scanned_symbols,
                 signals,
             )
 
@@ -87,14 +125,35 @@ class SignalStore:
 
     def status(self) -> tuple[ScanUniverse | None, bool, datetime | None, int, int, int]:
         with self._lock:
+            snapshot = self._select_snapshot(self._universe)
             return (
                 self._universe,
                 self._scan_in_progress,
-                self._generated_at,
+                snapshot.generated_at if snapshot is not None else None,
                 self._universe_size,
                 self._scanned_symbols,
-                len(self._signals),
+                len(snapshot.signals) if snapshot is not None else 0,
             )
+
+    def _select_snapshot(self, universe: ScanUniverse | None) -> SignalSnapshot | None:
+        if universe is not None:
+            return self._snapshots.get(universe)
+
+        if self._universe is not None and self._universe in self._snapshots:
+            return self._snapshots[self._universe]
+
+        generated_snapshots = [
+            snapshot
+            for snapshot in self._snapshots.values()
+            if snapshot.generated_at is not None
+        ]
+        if not generated_snapshots:
+            return None
+
+        return max(
+            generated_snapshots,
+            key=lambda snapshot: snapshot.generated_at or datetime.min.replace(tzinfo=UTC),
+        )
 
 
 signal_store = SignalStore()

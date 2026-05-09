@@ -26,8 +26,8 @@ export function DashboardShell() {
   const [scanInProgress, setScanInProgress] = useState(false);
   const [scanNotice, setScanNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [minProbability, setMinProbability] = useState(0.6);
-  const [minRiskReward, setMinRiskReward] = useState(2.0);
+  const [minProbability, setMinProbability] = useState(0.55);
+  const [minRiskReward, setMinRiskReward] = useState(1.8);
   const [maxResults, setMaxResults] = useState(12);
   const [investmentAmount, setInvestmentAmount] = useState(DEFAULT_INVESTMENT);
   const [selectedSector, setSelectedSector] = useState("All sectors");
@@ -45,7 +45,7 @@ export function DashboardShell() {
       const activeUniverse = preferredUniverse ?? status.universe ?? DEFAULT_UNIVERSE;
       const [stockUniverse, latestSignals] = await Promise.all([
         getStocks(activeUniverse),
-        getLatestSignals()
+        getLatestSignals(activeUniverse)
       ]);
 
       setSelectedUniverse(activeUniverse);
@@ -63,7 +63,7 @@ export function DashboardShell() {
         setScanNotice(
           latestSignals.length
             ? `Latest ${formatUniverseLabel(activeUniverse)} results loaded.`
-            : `No saved opportunities are available yet for ${formatUniverseLabel(activeUniverse)}.`
+            : `No opportunities matched the current filters for ${formatUniverseLabel(activeUniverse)}. Try lowering min probability or min risk/reward and run again.`
         );
       }
 
@@ -124,7 +124,6 @@ export function DashboardShell() {
           setScanInProgress(false);
           if (!cancelled) {
             await refreshDashboard(statusUniverse);
-            setScanNotice("Fresh scan complete. Results have been updated.");
           }
           return;
         }
@@ -197,6 +196,10 @@ export function DashboardShell() {
                 : response.refresh_started
                   ? `${formatUniverseLabel(universe)} scan started in the background. Use Refresh results any time to pull the latest saved board.`
                   : "Another scan is already running. Use Refresh results to pull the latest saved board."
+            );
+          } else if (!response.results.length) {
+            setScanNotice(
+              `No opportunities matched the current filters for ${formatUniverseLabel(universe)}. Try lowering min probability or min risk/reward and run again.`
             );
           } else {
             setScanNotice("Scan complete. Results are ready below.");
