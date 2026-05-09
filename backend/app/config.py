@@ -22,16 +22,23 @@ def _parse_cors_origins() -> tuple[str, ...]:
     )
 
 
+def _parse_csv_env(name: str) -> tuple[str, ...]:
+    raw = os.getenv(name)
+    if not raw:
+        return ()
+
+    values = tuple(
+        value.strip()
+        for value in raw.split(",")
+        if value.strip()
+    )
+    return values
+
+
 def _parse_benchmark_symbol_fallbacks() -> tuple[str, ...]:
-    raw = os.getenv("BENCHMARK_SYMBOL_FALLBACKS")
-    if raw:
-        fallbacks = tuple(
-            symbol.strip()
-            for symbol in raw.split(",")
-            if symbol.strip()
-        )
-        if fallbacks:
-            return fallbacks
+    fallbacks = _parse_csv_env("BENCHMARK_SYMBOL_FALLBACKS")
+    if fallbacks:
+        return fallbacks
 
     return ("NIFTYBEES.NS",)
 
@@ -119,6 +126,22 @@ class Settings:
     benchmark_symbol: str = os.getenv("BENCHMARK_SYMBOL", "^NSEI")
     benchmark_name: str = os.getenv("BENCHMARK_NAME", "NIFTY 50")
     benchmark_symbol_fallbacks: tuple[str, ...] = _parse_benchmark_symbol_fallbacks()
+    email_smtp_host: str = os.getenv("EMAIL_SMTP_HOST", "smtp.gmail.com")
+    email_smtp_port: int = int(os.getenv("EMAIL_SMTP_PORT", "587"))
+    email_smtp_starttls: bool = os.getenv("EMAIL_SMTP_STARTTLS", "1") == "1"
+    email_smtp_username: str = os.getenv("EMAIL_SMTP_USERNAME", "")
+    email_smtp_password: str = os.getenv("EMAIL_SMTP_PASSWORD", "")
+    email_from_address: str = os.getenv("EMAIL_FROM_ADDRESS", "")
+    email_report_recipients: tuple[str, ...] = _parse_csv_env("EMAIL_REPORT_RECIPIENTS")
+    email_report_timezone: str = os.getenv("EMAIL_REPORT_TIMEZONE", "Asia/Kolkata")
+    email_report_max_results: int = int(os.getenv("EMAIL_REPORT_MAX_RESULTS", "12"))
+    email_report_min_probability: float = float(
+        os.getenv("EMAIL_REPORT_MIN_PROBABILITY", "0.55")
+    )
+    email_report_min_risk_reward: float = float(
+        os.getenv("EMAIL_REPORT_MIN_RISK_REWARD", "1.8")
+    )
+    email_report_enabled: bool = os.getenv("EMAIL_REPORT_ENABLED", "1") == "1"
     cors_origins: tuple[str, ...] = _parse_cors_origins()
 
 

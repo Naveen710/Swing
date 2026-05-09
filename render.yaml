@@ -66,3 +66,81 @@ services:
         value: 22.14.0
       - key: NEXT_PUBLIC_API_BASE_URL
         value: https://naveen710-swing-api.onrender.com/api
+
+  - type: cron
+    name: naveen710-swing-daily-email
+    runtime: python
+    plan: starter
+    rootDir: backend
+    schedule: "30 3 * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app.jobs.send_daily_scan_report
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.2
+      - key: APP_RELEASE
+        value: daily-email-2026-05-09-1
+      - key: MARKET_DATA_PROVIDER
+        value: yahoo
+      - key: UNIVERSE_PROVIDER
+        value: bundled_csv
+      - key: ALLOW_DEMO_FALLBACK
+        value: "0"
+      - key: SCAN_WORKERS
+        value: "4"
+      - key: YAHOO_BATCH_SIZE
+        value: "60"
+      - key: MARKET_DATA_MEMORY_CACHE_SYMBOLS
+        value: "48"
+      - key: LIQUIDITY_FILTER_MIN_AVG_TRADED_VALUE_INR
+        value: "50000000"
+      - key: EVENT_RISK_REVIEW_LIMIT
+        value: "80"
+      - key: EVENT_RISK_WINDOW_DAYS
+        value: "7"
+      - key: EVENT_RISK_HIGH_PENALTY_DAYS
+        value: "3"
+      - key: EVENT_RISK_POST_RESULT_COOLOFF_DAYS
+        value: "2"
+      - key: EVENT_DATA_CACHE_TTL_MINUTES
+        value: "360"
+      - key: DELIVERY_DATA_CACHE_TTL_MINUTES
+        value: "1440"
+      - key: DELIVERY_DATA_SESSIONS
+        value: "10"
+      - key: NSE_DELIVERY_ARCHIVE_BASE_URL
+        value: https://archives.nseindia.com/archives/equities/mto
+      - key: ASYNC_SCAN_UNIVERSE_THRESHOLD
+        value: "999999"
+      - key: BENCHMARK_SYMBOL
+        value: ^NSEI
+      - key: BENCHMARK_SYMBOL_FALLBACKS
+        value: NIFTYBEES.NS
+      - key: BENCHMARK_NAME
+        value: NIFTY 50
+      - key: NSE_EQUITY_FALLBACK_CSV_URL
+        value: https://archives.nseindia.com/content/equities/EQUITY_L.csv
+      - key: EMAIL_REPORT_ENABLED
+        value: "0"
+      - key: EMAIL_REPORT_TIMEZONE
+        value: Asia/Kolkata
+      - key: EMAIL_REPORT_MAX_RESULTS
+        value: "12"
+      - key: EMAIL_REPORT_MIN_PROBABILITY
+        value: "0.55"
+      - key: EMAIL_REPORT_MIN_RISK_REWARD
+        value: "1.8"
+      - key: EMAIL_SMTP_HOST
+        value: smtp.gmail.com
+      - key: EMAIL_SMTP_PORT
+        value: "587"
+      - key: EMAIL_SMTP_STARTTLS
+        value: "1"
+      - key: EMAIL_REPORT_RECIPIENTS
+        value: naveeneggadi@gmail.com
+      - key: EMAIL_FROM_ADDRESS
+        sync: false
+      - key: EMAIL_SMTP_USERNAME
+        sync: false
+      - key: EMAIL_SMTP_PASSWORD
+        sync: false

@@ -130,6 +130,9 @@ with a two-service blueprint:
 
 - `naveen710-swing-api`: FastAPI backend
 - `naveen710-swing-web`: Next.js frontend
+- `naveen710-swing-daily-email`: daily cron job that scans all three universes
+  and emails the ranked results at 9:00 AM IST (`30 3 * * *` in Render's UTC
+  cron schedule)
 
 Before using it on Render:
 
@@ -138,6 +141,11 @@ Before using it on Render:
 3. If the default service names are already taken on Render, rename them in
    `render.yaml` and update both:
    `CORS_ORIGINS` and `NEXT_PUBLIC_API_BASE_URL`.
+4. For the daily email job, set these environment variables in Render:
+   `EMAIL_FROM_ADDRESS`, `EMAIL_SMTP_USERNAME`, and `EMAIL_SMTP_PASSWORD`.
+   Gmail works well here with `smtp.gmail.com:587` and an app password.
+5. The cron service uses a paid Render plan because Render cron jobs are not
+   available on the free tier.
 
 ## API endpoints
 

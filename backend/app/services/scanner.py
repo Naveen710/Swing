@@ -148,6 +148,23 @@ class ScannerService:
 
         return self._execute_scan(listings, request)
 
+    def run_scan_sync(self, request: ScanRequest) -> ScanResponse:
+        listings = load_universe(
+            universe=request.universe,
+            symbols=request.symbols,
+            sectors=request.sectors,
+            market_caps=request.market_caps,
+        )
+        if not listings:
+            return ScanResponse(
+                universe=request.universe,
+                generated_at=datetime.now(UTC),
+                universe_size=0,
+                scanned_symbols=0,
+                results=[],
+            )
+        return self._execute_scan(listings, request)
+
     def _execute_scan(
         self,
         listings: list[StockListing],
