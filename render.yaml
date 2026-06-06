@@ -8,7 +8,7 @@ services:
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: APP_RELEASE
-        value: scan-buttons-fix-2026-05-09-1
+        value: render-launch-2026-06-06-1
       - key: PYTHON_VERSION
         value: 3.13.2
       - key: MARKET_DATA_PROVIDER
@@ -81,7 +81,7 @@ services:
       - key: PYTHON_VERSION
         value: 3.13.2
       - key: APP_RELEASE
-        value: daily-email-2026-05-09-1
+        value: daily-email-2026-06-06-1
       - key: MARKET_DATA_PROVIDER
         value: yahoo
       - key: UNIVERSE_PROVIDER
