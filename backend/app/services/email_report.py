@@ -147,7 +147,7 @@ def _render_universe_text(report: UniverseReport) -> list[str]:
 
     header = (
         "Stock | Sector | Pattern | Entry | Stop | Target | Prob | RR | ETA | "
-        "Expected Profit | RS | Liquidity20D | Event"
+        "Expected Profit | RS | Quality | Liquidity20D | Event"
     )
     lines.extend([header, "-" * len(header)])
     for signal in report.response.results:
@@ -173,7 +173,7 @@ def _render_universe_html(report: UniverseReport) -> str:
         + "<thead><tr>"
         + "<th>Stock</th><th>Sector</th><th>Pattern</th><th>Entry</th><th>Stop</th><th>Target</th>"
         + "<th>Probability</th><th>R:R</th><th>Target ETA</th><th>Expected Profit</th>"
-        + "<th>RS</th><th>Liquidity 20D</th><th>Event</th>"
+        + "<th>RS</th><th>Quality</th><th>Liquidity 20D</th><th>Event</th>"
         + "</tr></thead><tbody>"
         + rows
         + "</tbody></table>"
@@ -194,8 +194,9 @@ def _render_signal_text(signal: TradeSetup) -> str:
             f"{signal.estimated_target_sessions} sessions ({signal.estimated_target_date.isoformat()})",
             _format_currency(signal.expected_profit_amount),
             f"{round(signal.relative_strength.score * 100)}",
+            f"{round(signal.breakout_quality_score * 100)}",
             f"{signal.liquidity.average_traded_value_20d_cr:.1f} Cr",
-            signal.event_risk.risk_level.title(),
+            _format_event_label(signal),
         ]
     )
 
@@ -214,8 +215,9 @@ def _render_signal_html(signal: TradeSetup) -> str:
         + f"<td>{signal.estimated_target_sessions} sessions ({escape(signal.estimated_target_date.isoformat())})</td>"
         + f"<td>{escape(_format_currency(signal.expected_profit_amount))}</td>"
         + f"<td>{round(signal.relative_strength.score * 100)}</td>"
+        + f"<td>{round(signal.breakout_quality_score * 100)}</td>"
         + f"<td>{signal.liquidity.average_traded_value_20d_cr:.1f} Cr</td>"
-        + f"<td>{escape(signal.event_risk.risk_level.title())}</td>"
+        + f"<td>{escape(_format_event_label(signal))}</td>"
         + "</tr>"
     )
 
@@ -228,3 +230,13 @@ def _describe_execution(universe: ScanUniverse) -> str:
     if universe == ScanUniverse.MID_SMALL_2000_PLUS:
         return f"{settings.mid_small_parallel_workers} parallel workers"
     return f"{settings.scan_workers} parallel workers"
+
+
+def _format_event_label(signal: TradeSetup) -> str:
+    label = signal.event_risk.risk_level.title()
+    if signal.event_risk.event_type and signal.event_risk.days_to_event is not None:
+        return (
+            f"{label} ({signal.event_risk.event_type.title()} in "
+            f"{signal.event_risk.days_to_event}D)"
+        )
+    return label

@@ -25,6 +25,9 @@ export interface IndicatorSnapshot {
   rsi14: number;
   atr14: number;
   volume_ratio: number;
+  volume_expansion_ratio_3d: number;
+  roc_20d_pct: number;
+  rsi_slope_5d: number;
   price_vs_ema20_pct: number;
 }
 
@@ -53,6 +56,7 @@ export interface LiquiditySnapshot {
 export interface AccumulationSnapshot {
   score: number;
   up_volume_ratio_10d: number;
+  volume_expansion_ratio_3d: number;
   atr_contraction_ratio: number;
   closes_near_high_10d: number;
   average_delivery_pct_10d: number | null;
@@ -74,8 +78,12 @@ export interface SectorStrengthSnapshot {
 export interface EventRiskSnapshot {
   earnings_date: string | null;
   days_to_earnings: number | null;
+  event_date: string | null;
+  days_to_event: number | null;
+  event_type: string | null;
   risk_level: string;
   ranking_penalty: number;
+  blocked: boolean;
 }
 
 export interface BacktestStats {
@@ -103,6 +111,7 @@ export interface TradeSetup {
   risk_reward_ratio: number;
   probability_score: number;
   ranking_score: number;
+  breakout_quality_score: number;
   expected_profit_amount: number;
   expected_return_pct: number;
   estimated_target_sessions: number;

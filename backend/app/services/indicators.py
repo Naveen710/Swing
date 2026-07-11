@@ -36,11 +36,19 @@ def apply_indicators(frame: pd.DataFrame) -> pd.DataFrame:
     enriched["volume_ratio"] = (
         enriched["Volume"] / enriched["volume_avg20"].replace(0, np.nan)
     ).fillna(1.0)
+    enriched["volume_sum_3d"] = enriched["Volume"].rolling(3).sum()
+    enriched["volume_expansion_ratio_3d"] = (
+        enriched["volume_sum_3d"] / (enriched["volume_avg20"] * 3).replace(0, np.nan)
+    ).fillna(1.0)
     enriched["traded_value"] = enriched["Close"] * enriched["Volume"]
     enriched["traded_value_avg20"] = enriched["traded_value"].rolling(20).mean()
     enriched["traded_value_avg50"] = enriched["traded_value"].rolling(50).mean()
     enriched["atr_pct"] = (
         enriched["atr14"] / enriched["Close"].replace(0, np.nan)
+    ).fillna(0.0)
+    enriched["roc_20d_pct"] = enriched["Close"].pct_change(20).fillna(0.0) * 100
+    enriched["rsi_slope_5d"] = (
+        (enriched["rsi14"] - enriched["rsi14"].shift(5)) / 5
     ).fillna(0.0)
 
     enriched["rolling_high_20"] = enriched["High"].rolling(20).max()

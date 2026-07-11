@@ -27,10 +27,16 @@ services:
         value: "48"
       - key: LIQUIDITY_FILTER_MIN_AVG_TRADED_VALUE_INR
         value: "50000000"
+      - key: SCAN_RESULT_CACHE_TTL_MINUTES
+        value: "15"
+      - key: WEAK_MARKET_SECTOR_LIMIT
+        value: "3"
       - key: EVENT_RISK_REVIEW_LIMIT
         value: "80"
       - key: EVENT_RISK_WINDOW_DAYS
         value: "7"
+      - key: EVENT_RISK_EXCLUSION_TRADING_DAYS
+        value: "5"
       - key: EVENT_RISK_HIGH_PENALTY_DAYS
         value: "3"
       - key: EVENT_RISK_POST_RESULT_COOLOFF_DAYS
@@ -44,7 +50,7 @@ services:
       - key: NSE_DELIVERY_ARCHIVE_BASE_URL
         value: https://archives.nseindia.com/archives/equities/mto
       - key: ASYNC_SCAN_UNIVERSE_THRESHOLD
-        value: "500"
+        value: "200"
       - key: BENCHMARK_SYMBOL
         value: ^NSEI
       - key: BENCHMARK_SYMBOL_FALLBACKS
@@ -68,6 +74,64 @@ services:
         value: 22.14.0
       - key: NEXT_PUBLIC_API_BASE_URL
         value: https://naveen710-swing-api.onrender.com/api
+
+  - type: worker
+    name: naveen710-swing-alerts
+    env: node
+    rootDir: alerts
+    buildCommand: npm install && npm run check
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 22.14.0
+      - key: SCANNER_API_BASE_URL
+        value: https://naveen710-swing-api.onrender.com/api
+      - key: SCANNER_WEB_URL
+        value: https://naveen710-swing-web.onrender.com
+      - key: SCAN_UNIVERSE
+        value: nifty500
+      - key: SCAN_MAX_RESULTS
+        value: "5"
+      - key: SCAN_MIN_PROBABILITY
+        value: "0.55"
+      - key: SCAN_MIN_RISK_REWARD
+        value: "1.8"
+      - key: SCAN_INVESTMENT_AMOUNT
+        value: "100000"
+      - key: ALERT_TIMEZONE
+        value: Asia/Kolkata
+      - key: ENABLE_EMAIL_ALERTS
+        value: "1"
+      - key: ENABLE_WHATSAPP_ALERTS
+        value: "1"
+      - key: ALERT_EMAIL_TO
+        value: naveeneggadi@gmail.com,praveeneggadi044@gmail.com
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_SECURE
+        value: "false"
+      - key: CALLMEBOT_BASE_URL
+        value: https://api.callmebot.com/whatsapp.php
+      - key: SCAN_REQUEST_TIMEOUT_MS
+        value: "120000"
+      - key: SCAN_POLL_INTERVAL_MS
+        value: "15000"
+      - key: SCAN_POLL_TIMEOUT_MS
+        value: "420000"
+      - key: NSE_MARKET_HOLIDAYS
+        value: ""
+      - key: ALERT_EMAIL_FROM
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: WHATSAPP_PHONE
+        sync: false
+      - key: WHATSAPP_API_KEY
+        sync: false
 
   - type: cron
     name: naveen710-swing-daily-email
@@ -98,10 +162,16 @@ services:
         value: "48"
       - key: LIQUIDITY_FILTER_MIN_AVG_TRADED_VALUE_INR
         value: "50000000"
+      - key: SCAN_RESULT_CACHE_TTL_MINUTES
+        value: "15"
+      - key: WEAK_MARKET_SECTOR_LIMIT
+        value: "3"
       - key: EVENT_RISK_REVIEW_LIMIT
         value: "80"
       - key: EVENT_RISK_WINDOW_DAYS
         value: "7"
+      - key: EVENT_RISK_EXCLUSION_TRADING_DAYS
+        value: "5"
       - key: EVENT_RISK_HIGH_PENALTY_DAYS
         value: "3"
       - key: EVENT_RISK_POST_RESULT_COOLOFF_DAYS
@@ -125,7 +195,7 @@ services:
       - key: NSE_EQUITY_FALLBACK_CSV_URL
         value: https://archives.nseindia.com/content/equities/EQUITY_L.csv
       - key: EMAIL_REPORT_ENABLED
-        value: "0"
+        value: "1"
       - key: EMAIL_REPORT_TIMEZONE
         value: Asia/Kolkata
       - key: EMAIL_REPORT_MAX_RESULTS

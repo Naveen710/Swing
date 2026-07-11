@@ -60,6 +60,7 @@ class TradeCandidate:
     risk_reward_ratio: float
     probability_score: float
     ranking_score: float
+    breakout_quality_score: float
     expected_profit_amount: float
     expected_return_pct: float
     indicators: IndicatorSnapshot
@@ -112,6 +113,11 @@ class ScannerService:
                 results=[],
             )
 
+        cached_response = self._get_cached_response(request)
+        if cached_response is not None:
+            self._restore_snapshot_from_response(cached_response)
+            return cached_response
+
         if self._should_run_async(listings, request):
             refresh_started = self._start_incremental_scan(request, listings)
             (
@@ -138,16 +144,18 @@ class ScannerService:
                 )
             return ScanResponse(
                 universe=request.universe,
-                generated_at=generated_at or datetime.now(UTC),
-                universe_size=universe_size,
-                scanned_symbols=scanned_symbols,
-                results=cached_results,
-                from_cache=bool(cached_results),
-                refresh_started=refresh_started,
-                scan_in_progress=True,
-            )
+            generated_at=generated_at or datetime.now(UTC),
+            universe_size=universe_size,
+            scanned_symbols=scanned_symbols,
+            results=cached_results,
+            from_cache=bool(cached_results),
+            refresh_started=refresh_started,
+            scan_in_progress=True,
+        )
 
-        return self._execute_scan(listings, request)
+        response = self._execute_scan(listings, request)
+        self._store_cached_response(request, response)
+        return response
 
     def run_scan_sync(self, request: ScanRequest) -> ScanResponse:
         listings = load_universe(
@@ -164,7 +172,14 @@ class ScannerService:
                 scanned_symbols=0,
                 results=[],
             )
-        return self._execute_scan(listings, request)
+        cached_response = self._get_cached_response(request)
+        if cached_response is not None:
+            self._restore_snapshot_from_response(cached_response)
+            return cached_response
+
+        response = self._execute_scan(listings, request)
+        self._store_cached_response(request, response)
+        return response
 
     def _execute_scan(
         self,
@@ -179,7 +194,11 @@ class ScannerService:
             benchmark_context,
             delivery_trends,
         )
-        candidates = self._apply_candidate_overlays(candidates, request)
+        candidates = self._apply_candidate_overlays(
+            candidates,
+            request,
+            benchmark_context,
+        )
         candidates.sort(
             key=lambda candidate: (
                 candidate.ranking_score,
@@ -306,10 +325,7 @@ class ScannerService:
                 relative_strength=relative_strength,
                 delivery_trends=delivery_trends,
             )
-            if (
-                request.universe == ScanUniverse.MID_SMALL_2000_PLUS
-                and not candidate.liquidity.passes_filter
-            ):
+            if not candidate.liquidity.passes_filter:
                 return None
             if candidate.probability_score < request.min_probability:
                 return None
@@ -346,6 +362,7 @@ class ScannerService:
         current_price = float(latest["Close"])
         entry = round(max(current_price, match.trigger_price), 2)
         atr = float(latest["atr14"])
+        breakout_quality_score = self._build_breakout_quality_score(latest)
         technical_stop = min(match.support_price * 0.995, entry - atr * 0.8)
         risk = max(entry - technical_stop, atr * 1.1, entry * 0.022)
         stop_loss = round(entry - risk, 2)
@@ -356,7 +373,12 @@ class ScannerService:
         probability = max(0.45, round(probability - min(0.14, trigger_gap * 0.7), 3))
         probability = min(
             0.92,
-            round(probability + max(-0.04, (relative_strength.score - 0.5) * 0.18), 3),
+            round(
+                probability
+                + max(-0.04, (relative_strength.score - 0.5) * 0.18)
+                + max(-0.04, (breakout_quality_score - 0.5) * 0.1),
+                3,
+            ),
         )
         probability = min(
             0.95,
@@ -375,7 +397,8 @@ class ScannerService:
         ranking_score = round(
             probability * 0.5
             + min(risk_reward / 3.0, 1.0) * 0.18
-            + relative_strength.score * 0.32,
+            + relative_strength.score * 0.24
+            + breakout_quality_score * 0.08,
             3,
         )
         ranking_score = round(
@@ -392,6 +415,9 @@ class ScannerService:
             rsi14=round(float(latest["rsi14"]), 2),
             atr14=round(float(atr), 2),
             volume_ratio=round(float(latest["volume_ratio"]), 2),
+            volume_expansion_ratio_3d=round(float(latest["volume_expansion_ratio_3d"]), 2),
+            roc_20d_pct=round(float(latest["roc_20d_pct"]), 2),
+            rsi_slope_5d=round(float(latest["rsi_slope_5d"]), 2),
             price_vs_ema20_pct=round(
                 ((entry / float(latest["ema20"])) - 1) * 100,
                 2,
@@ -414,6 +440,7 @@ class ScannerService:
             risk_reward_ratio=risk_reward,
             probability_score=probability,
             ranking_score=ranking_score,
+            breakout_quality_score=breakout_quality_score,
             expected_profit_amount=expected_profit_amount,
             expected_return_pct=expected_return_pct,
             indicators=indicators,
@@ -472,15 +499,14 @@ class ScannerService:
             f" Sector rank: {candidate.sector_strength.rank}/{candidate.sector_strength.sector_count} "
             f"with sector strength score {candidate.sector_strength.score:.2f}."
         )
-        accumulation_note = self._build_accumulation_note(candidate.accumulation)
-        event_note = (
-            f" Earnings risk: {candidate.event_risk.risk_level}"
-            + (
-                f", {candidate.event_risk.days_to_earnings} days to results."
-                if candidate.event_risk.days_to_earnings is not None
-                else ", upcoming results date unavailable."
-            )
+        quality_note = (
+            f" Breakout quality score: {candidate.breakout_quality_score:.2f} from "
+            f"{candidate.indicators.roc_20d_pct:+.1f}% 20-session momentum, "
+            f"RSI slope {candidate.indicators.rsi_slope_5d:+.2f}, and "
+            f"{candidate.indicators.volume_expansion_ratio_3d:.2f}x 3-day volume expansion."
         )
+        accumulation_note = self._build_accumulation_note(candidate.accumulation)
+        event_note = self._build_event_risk_note(candidate.event_risk)
         timing_note = (
             f" Estimated target window: about {estimated_target_sessions} trading sessions, "
             f"which points to {estimated_target_date.strftime('%d %b %Y')} if the setup follows "
@@ -489,12 +515,12 @@ class ScannerService:
         reason = (
             f"{candidate.match.explanation} Backtest win rate: {backtest.win_rate:.0%} across "
             f"{backtest.total_trades} historical occurrences.{candidate.setup_state}"
-            f"{timing_note}{rs_note}{sector_note}{liquidity_note}{accumulation_note}{event_note}"
+            f"{timing_note}{rs_note}{sector_note}{liquidity_note}{quality_note}{accumulation_note}{event_note}"
             if backtest.total_trades
             else (
                 f"{candidate.match.explanation} Historical sample is still sparse."
                 f"{candidate.setup_state}{timing_note}{rs_note}{sector_note}"
-                f"{liquidity_note}{accumulation_note}{event_note}"
+                f"{liquidity_note}{quality_note}{accumulation_note}{event_note}"
             )
         )
 
@@ -511,6 +537,7 @@ class ScannerService:
             risk_reward_ratio=candidate.risk_reward_ratio,
             probability_score=candidate.probability_score,
             ranking_score=candidate.ranking_score,
+            breakout_quality_score=candidate.breakout_quality_score,
             expected_profit_amount=candidate.expected_profit_amount,
             expected_return_pct=candidate.expected_return_pct,
             estimated_target_sessions=estimated_target_sessions,
@@ -527,7 +554,7 @@ class ScannerService:
 
     def _score_probability(self, latest, match: PatternMatch) -> float:
         score = match.strength
-        score += min(0.05, max(0.0, latest["volume_ratio"] - 1.0) * 0.03)
+        score += min(0.05, max(0.0, latest["volume_expansion_ratio_3d"] - 1.0) * 0.035)
         if latest["ema20"] > latest["ema50"] > latest["ema200"]:
             score += 0.04
         if 48 <= latest["rsi14"] <= 72:
@@ -542,10 +569,28 @@ class ScannerService:
             score += 0.04
         return round(min(score, 0.88), 3)
 
+    def _build_breakout_quality_score(self, latest) -> float:
+        momentum_score = self._scale_metric(float(latest["roc_20d_pct"]), 0.0, 18.0)
+        rsi_slope_score = self._scale_metric(float(latest["rsi_slope_5d"]), -0.1, 2.0)
+        volume_score = self._scale_metric(
+            float(latest["volume_expansion_ratio_3d"]),
+            0.85,
+            1.8,
+        )
+        score = momentum_score * 0.42 + rsi_slope_score * 0.23 + volume_score * 0.35
+        return round(min(max(score, 0.05), 0.95), 3)
+
+    def _scale_metric(self, value: float, floor: float, ceiling: float) -> float:
+        if ceiling <= floor:
+            return 0.5
+        scaled = (value - floor) / (ceiling - floor)
+        return min(max(scaled, 0.0), 1.0)
+
     def _apply_candidate_overlays(
         self,
         candidates: list[TradeCandidate],
         request: ScanRequest,
+        benchmark_context: RelativeStrengthContext | None,
     ) -> list[TradeCandidate]:
         if not candidates:
             return []
@@ -573,11 +618,28 @@ class ScannerService:
             for candidate in candidates
         ]
 
-        if request.universe != ScanUniverse.MID_SMALL_2000_PLUS:
-            return enriched
+        if self._is_weak_market(benchmark_context):
+            strong_sectors = {
+                sector
+                for sector, snapshot in sector_map.items()
+                if snapshot.rank <= settings.weak_market_sector_limit
+            }
+            enriched = [
+                candidate
+                for candidate in enriched
+                if candidate.listing.sector in strong_sectors
+            ]
 
-        advanced = [self._apply_advanced_discovery_score(candidate) for candidate in enriched]
-        return self._apply_event_risk_overlay(advanced)
+        if not enriched:
+            return []
+
+        if request.universe == ScanUniverse.MID_SMALL_2000_PLUS:
+            enriched = [
+                self._apply_advanced_discovery_score(candidate)
+                for candidate in enriched
+            ]
+
+        return self._apply_event_risk_overlay(enriched, request)
 
     def _apply_advanced_discovery_score(
         self,
@@ -618,6 +680,7 @@ class ScannerService:
     def _apply_event_risk_overlay(
         self,
         candidates: list[TradeCandidate],
+        request: ScanRequest,
     ) -> list[TradeCandidate]:
         if not candidates:
             return []
@@ -630,7 +693,10 @@ class ScannerService:
             ),
             reverse=True,
         )
-        review_limit = min(len(sorted_candidates), settings.event_risk_review_limit)
+        review_limit = min(
+            len(sorted_candidates),
+            max(settings.event_risk_review_limit, request.max_results * 5),
+        )
         reviewed: dict[str, TradeCandidate] = {}
 
         for candidate in sorted_candidates[:review_limit]:
@@ -659,10 +725,13 @@ class ScannerService:
                 event_risk=event_risk,
             )
 
-        return [
-            reviewed.get(candidate.listing.symbol.upper(), candidate)
-            for candidate in candidates
-        ]
+        filtered: list[TradeCandidate] = []
+        for candidate in candidates:
+            updated = reviewed.get(candidate.listing.symbol.upper(), candidate)
+            if updated.event_risk.blocked:
+                continue
+            filtered.append(updated)
+        return filtered
 
     def _neutral_sector_strength(self, sector: str) -> SectorStrengthSnapshot:
         return SectorStrengthSnapshot(
@@ -679,8 +748,12 @@ class ScannerService:
         return EventRiskSnapshot(
             earnings_date=None,
             days_to_earnings=None,
+            event_date=None,
+            days_to_event=None,
+            event_type=None,
             risk_level="unknown",
             ranking_penalty=0.0,
+            blocked=False,
         )
 
     def _load_benchmark_context(
@@ -694,6 +767,7 @@ class ScannerService:
                     benchmark_listing,
                     lookback_days=lookback_days,
                 )
+                benchmark_frame = apply_indicators(benchmark_frame)
                 return RelativeStrengthContext(
                     benchmark_listing=benchmark_listing,
                     benchmark_frame=benchmark_frame,
@@ -706,6 +780,18 @@ class ScannerService:
             " | ".join(failures),
         )
         return None
+
+    def _is_weak_market(
+        self,
+        benchmark_context: RelativeStrengthContext | None,
+    ) -> bool:
+        if benchmark_context is None or benchmark_context.benchmark_frame.empty:
+            return False
+        latest = benchmark_context.benchmark_frame.iloc[-1]
+        return bool(
+            latest["Close"] < latest["ema20"]
+            and latest["Close"] < latest["ema50"]
+        )
 
     def _load_delivery_trends(
         self,
@@ -982,7 +1068,11 @@ class ScannerService:
         return max(1, min(base_workers, listing_count))
 
     def _finish_incremental_scan(self, state: ActiveScanState) -> None:
-        state.candidates = self._apply_candidate_overlays(state.candidates, state.request)
+        state.candidates = self._apply_candidate_overlays(
+            state.candidates,
+            state.request,
+            state.benchmark_context,
+        )
         state.candidates.sort(
             key=lambda candidate: (
                 candidate.ranking_score,
@@ -1006,6 +1096,16 @@ class ScannerService:
             universe_size=len(state.listings),
             scanned_symbols=len(state.listings),
         )
+        self._store_cached_response(
+            state.request,
+            ScanResponse(
+                universe=state.request.universe,
+                generated_at=generated_at,
+                universe_size=len(state.listings),
+                scanned_symbols=len(state.listings),
+                results=limited,
+            ),
+        )
 
     def _build_accumulation_note(
         self,
@@ -1015,19 +1115,97 @@ class ScannerService:
             f" Accumulation score: {accumulation.score:.2f} with "
             f"{accumulation.closes_near_high_10d} strong closes near highs in the last 10 sessions."
         )
+        volume_note = (
+            f" The 3-day cumulative volume expansion ratio is "
+            f"{accumulation.volume_expansion_ratio_3d:.2f}x versus the 20-day average."
+        )
         if (
             accumulation.source != "nse_delivery"
             or accumulation.average_delivery_pct_10d is None
             or accumulation.latest_delivery_pct is None
         ):
-            return base_note + " Delivery quality is using the internal volume proxy."
+            return base_note + volume_note + " Delivery quality is using the internal volume proxy."
 
         return (
             base_note
+            + volume_note
             + f" NSE delivery confirms the move with a 10-session average of "
             + f"{accumulation.average_delivery_pct_10d:.1f}%, latest delivery at "
             + f"{accumulation.latest_delivery_pct:.1f}%, and "
             + f"{accumulation.rising_delivery_days_10d} rising delivery sessions."
+        )
+
+    def _build_event_risk_note(self, event_risk: EventRiskSnapshot) -> str:
+        if event_risk.event_type and event_risk.days_to_event is not None:
+            return (
+                f" Event risk: {event_risk.risk_level} because of "
+                f"{event_risk.event_type} in {event_risk.days_to_event} trading days."
+            )
+        if event_risk.days_to_earnings is not None:
+            return (
+                f" Event risk: {event_risk.risk_level}, earnings are "
+                f"{event_risk.days_to_earnings} trading days away."
+            )
+        return " Event risk: upcoming earnings or dividend dates are unavailable."
+
+    def _get_cached_response(self, request: ScanRequest) -> ScanResponse | None:
+        cached = signal_store.get_scan_cache(
+            self._request_cache_key(request),
+            ttl_minutes=settings.scan_result_cache_ttl_minutes,
+        )
+        if cached is None:
+            return None
+        return cached.model_copy(
+            update={
+                "from_cache": True,
+                "refresh_started": False,
+                "scan_in_progress": False,
+            }
+        )
+
+    def _store_cached_response(
+        self,
+        request: ScanRequest,
+        response: ScanResponse,
+    ) -> None:
+        signal_store.put_scan_cache(
+            self._request_cache_key(request),
+            response.model_copy(
+                update={
+                    "from_cache": False,
+                    "refresh_started": False,
+                    "scan_in_progress": False,
+                }
+            ),
+        )
+
+    def _restore_snapshot_from_response(self, response: ScanResponse) -> None:
+        signal_store.replace(
+            response.results,
+            universe=response.universe,
+            generated_at=response.generated_at,
+            universe_size=response.universe_size,
+            scanned_symbols=response.scanned_symbols,
+        )
+
+    def _request_cache_key(self, request: ScanRequest) -> str:
+        sectors = ",".join(sorted(request.sectors or []))
+        market_caps = ",".join(
+            sorted(bucket.value for bucket in (request.market_caps or []))
+        )
+        symbols = ",".join(sorted(symbol.upper() for symbol in (request.symbols or [])))
+        return "|".join(
+            [
+                request.universe.value,
+                str(request.max_results),
+                f"{request.min_probability:.4f}",
+                f"{request.min_risk_reward:.4f}",
+                str(request.lookback_days),
+                str(request.investment_amount),
+                sectors,
+                market_caps,
+                symbols,
+            ]
         )
 
 scanner_service = ScannerService()

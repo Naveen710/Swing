@@ -130,6 +130,22 @@ export function StockDetailShell({ symbol }: { symbol: string }) {
               <Metric label="EMA50" value={signal.indicators.ema50.toFixed(2)} />
               <Metric label="EMA200" value={signal.indicators.ema200.toFixed(2)} />
               <Metric label="RSI14" value={signal.indicators.rsi14.toFixed(2)} />
+              <Metric
+                label="20D ROC"
+                value={formatSignedPct(signal.indicators.roc_20d_pct)}
+              />
+              <Metric
+                label="RSI slope (5D)"
+                value={signal.indicators.rsi_slope_5d.toFixed(2)}
+              />
+              <Metric
+                label="3D volume expansion"
+                value={`${signal.indicators.volume_expansion_ratio_3d.toFixed(2)}x`}
+              />
+              <Metric
+                label="Breakout quality"
+                value={`${Math.round(signal.breakout_quality_score * 100)}`}
+              />
             </div>
           </article>
         </section>
@@ -169,6 +185,10 @@ export function StockDetailShell({ symbol }: { symbol: string }) {
               <Metric
                 label="Up/down volume"
                 value={signal.accumulation.up_volume_ratio_10d.toFixed(2)}
+              />
+              <Metric
+                label="3D volume expansion"
+                value={`${signal.accumulation.volume_expansion_ratio_3d.toFixed(2)}x`}
               />
               <Metric
                 label="ATR contraction"
@@ -233,6 +253,30 @@ export function StockDetailShell({ symbol }: { symbol: string }) {
               <Metric
                 label="Risk level"
                 value={capitalize(signal.event_risk.risk_level)}
+              />
+              <Metric
+                label="Event type"
+                value={
+                  signal.event_risk.event_type
+                    ? capitalize(signal.event_risk.event_type)
+                    : "Unknown"
+                }
+              />
+              <Metric
+                label="Days to next event"
+                value={
+                  signal.event_risk.days_to_event !== null
+                    ? `${signal.event_risk.days_to_event}`
+                    : "Unknown"
+                }
+              />
+              <Metric
+                label="Event date"
+                value={
+                  signal.event_risk.event_date
+                    ? formatDate(signal.event_risk.event_date)
+                    : "Unknown"
+                }
               />
               <Metric
                 label="Days to earnings"

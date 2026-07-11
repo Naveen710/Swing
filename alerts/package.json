@@ -1,0 +1,21 @@
+{
+  "name": "nse-swing-alert-worker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Node.js alert worker for the NSE swing scanner.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "once": "node index.js --run-now",
+    "check": "node --check index.js && node --check scheduler.js && node --check mailer.js && node --check whatsapp.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "axios": "^1.11.0",
+    "dotenv": "^16.6.1",
+    "node-cron": "^4.2.1",
+    "nodemailer": "^7.0.5"
+  }
+}

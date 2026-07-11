@@ -3,9 +3,9 @@ from __future__ import annotations
 import threading
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
-from app.schemas import ScanUniverse, TradeSetup
+from app.schemas import ScanResponse, ScanUniverse, TradeSetup
 
 
 @dataclass
@@ -16,6 +16,12 @@ class SignalSnapshot:
     scanned_symbols: int = 0
 
 
+@dataclass
+class ScanCacheEntry:
+    response: ScanResponse
+    cached_at: datetime
+
+
 class SignalStore:
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -24,6 +30,7 @@ class SignalStore:
         self._scanned_symbols = 0
         self._scan_in_progress = False
         self._universe: ScanUniverse | None = None
+        self._scan_cache: dict[str, ScanCacheEntry] = {}
 
     def replace(
         self,
@@ -133,6 +140,30 @@ class SignalStore:
                 self._universe_size,
                 self._scanned_symbols,
                 len(snapshot.signals) if snapshot is not None else 0,
+            )
+
+    def get_scan_cache(
+        self,
+        key: str,
+        *,
+        ttl_minutes: int,
+    ) -> ScanResponse | None:
+        with self._lock:
+            entry = self._scan_cache.get(key)
+            if entry is None:
+                return None
+
+            if datetime.now(UTC) - entry.cached_at > timedelta(minutes=ttl_minutes):
+                self._scan_cache.pop(key, None)
+                return None
+
+            return entry.response
+
+    def put_scan_cache(self, key: str, response: ScanResponse) -> None:
+        with self._lock:
+            self._scan_cache[key] = ScanCacheEntry(
+                response=response,
+                cached_at=datetime.now(UTC),
             )
 
     def _select_snapshot(self, universe: ScanUniverse | None) -> SignalSnapshot | None:

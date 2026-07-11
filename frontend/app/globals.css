@@ -12,6 +12,8 @@
   --red: #b94b51;
   --blue: #3659a2;
   --shadow: 0 20px 60px rgba(105, 63, 11, 0.12);
+  --font-body: "Aptos", "Segoe UI", "Helvetica Neue", sans-serif;
+  --font-space-grotesk: "Bahnschrift SemiCondensed", "Trebuchet MS", "Arial Narrow", sans-serif;
 }
 
 * {
@@ -29,6 +31,7 @@ body {
   color: var(--text);
   background: transparent;
   min-height: 100vh;
+  font-family: var(--font-body);
 }
 
 a {

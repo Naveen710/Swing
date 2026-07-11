@@ -19,6 +19,7 @@ export function OpportunitiesTable({ signals }: { signals: TradeSetup[] }) {
             <th>Stock</th>
             <th>Pattern</th>
             <th>RS vs NIFTY</th>
+            <th>Quality</th>
             <th>Entry</th>
             <th>Stop</th>
             <th>Target</th>
@@ -55,6 +56,15 @@ export function OpportunitiesTable({ signals }: { signals: TradeSetup[] }) {
                   Sector {signal.sector_strength.rank}/{signal.sector_strength.sector_count}
                 </div>
               </td>
+              <td>
+                {Math.round(signal.breakout_quality_score * 100)}
+                <div className="table-subtext">
+                  ROC {formatSignedPct(signal.indicators.roc_20d_pct)}
+                </div>
+                <div className="table-subtext">
+                  3D Vol {signal.indicators.volume_expansion_ratio_3d.toFixed(2)}x
+                </div>
+              </td>
               <td>{formatCurrency(signal.entry_price)}</td>
               <td>{formatCurrency(signal.stop_loss)}</td>
               <td>{formatCurrency(signal.target_price)}</td>
@@ -70,6 +80,14 @@ export function OpportunitiesTable({ signals }: { signals: TradeSetup[] }) {
                 <div className="table-subtext">
                   Event {formatRiskLabel(signal.event_risk.risk_level)}
                 </div>
+                {signal.event_risk.event_type ? (
+                  <div className="table-subtext">
+                    {formatEventType(signal.event_risk.event_type)}{" "}
+                    {signal.event_risk.days_to_event !== null
+                      ? `${signal.event_risk.days_to_event}D`
+                      : ""}
+                  </div>
+                ) : null}
               </td>
               <td>{formatCurrency(signal.expected_profit_amount)}</td>
             </tr>
@@ -109,5 +127,9 @@ function formatDate(value: string) {
 }
 
 function formatRiskLabel(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatEventType(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }

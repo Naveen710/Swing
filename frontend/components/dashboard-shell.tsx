@@ -169,24 +169,36 @@ export function DashboardShell() {
     : 0;
 
   async function handleScan(universe: ScanUniverse) {
+    const isSameUniverse = selectedUniverse === universe;
     setSelectedUniverse(universe);
     setScanning(true);
     setError(null);
+    setScanNotice(`Loading ${formatUniverseLabel(universe)} universe and starting the scan...`);
+    if (!isSameUniverse) {
+      setSignals([]);
+    }
 
     startTransition(() => {
-      void Promise.all([
-        runScan({
-          universe,
-          max_results: maxResults,
-          min_probability: minProbability,
-          min_risk_reward: minRiskReward,
-          investment_amount: investmentAmount,
-          sectors: selectedSector === "All sectors" ? undefined : [selectedSector]
-        }),
-        getStocks(universe)
-      ])
-        .then(([response, stockUniverse]) => {
+      const stockUniversePromise = getStocks(universe)
+        .then((stockUniverse) => {
           setStocks(stockUniverse);
+          return stockUniverse;
+        })
+        .catch(() => {
+          setError("Unable to load the selected stock universe from the backend.");
+          return [];
+        });
+
+      void runScan({
+        universe,
+        max_results: maxResults,
+        min_probability: minProbability,
+        min_risk_reward: minRiskReward,
+        investment_amount: investmentAmount,
+        sectors: selectedSector === "All sectors" ? undefined : [selectedSector]
+      })
+        .then(async (response) => {
+          await stockUniversePromise;
           setSignals(response.results);
           setScanInProgress(response.scan_in_progress);
           if (response.scan_in_progress) {
@@ -200,6 +212,10 @@ export function DashboardShell() {
           } else if (!response.results.length) {
             setScanNotice(
               `No opportunities matched the current filters for ${formatUniverseLabel(universe)}. Try lowering min probability or min risk/reward and run again.`
+            );
+          } else if (response.from_cache) {
+            setScanNotice(
+              `Loaded a fresh cached ${formatUniverseLabel(universe)} board from the last 15 minutes to avoid a redundant scan.`
             );
           } else {
             setScanNotice("Scan complete. Results are ready below.");

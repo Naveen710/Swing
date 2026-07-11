@@ -58,8 +58,8 @@ def detect_consolidation_breakout(frame: pd.DataFrame) -> PatternMatch | None:
     )
     strength += 0.16 if full_trend else 0.1 if trend_supportive else 0.0
     strength += _score_band(
-        latest["volume_ratio"],
-        ((1.35, 0.14), (1.0, 0.09), (0.85, 0.04)),
+        latest["volume_expansion_ratio_3d"],
+        ((1.25, 0.14), (1.0, 0.09), (0.85, 0.04)),
     )
     strength += _score_band(
         latest["rsi14"],
@@ -119,8 +119,8 @@ def detect_ema_pullback(frame: pd.DataFrame) -> PatternMatch | None:
         ((42.0, 0.1), (35.0, 0.07), (30.0, 0.04)),
     ) if latest["rsi14"] <= 72 else 0.0
     strength += _score_band(
-        latest["volume_ratio"],
-        ((1.2, 0.09), (0.95, 0.06), (0.8, 0.03)),
+        latest["volume_expansion_ratio_3d"],
+        ((1.1, 0.09), (0.95, 0.06), (0.8, 0.03)),
     )
     strength += 0.05 if ema20_rising else 0.0
 
@@ -192,8 +192,8 @@ def detect_relative_strength_breakout(
         ((52.0, 0.08), (45.0, 0.05)),
     ) if latest["rsi14"] <= 78 else 0.0
     strength += _score_band(
-        latest["volume_ratio"],
-        ((1.15, 0.07), (0.95, 0.04)),
+        latest["volume_expansion_ratio_3d"],
+        ((1.1, 0.07), (0.95, 0.04)),
     )
     strength += 0.05 if compression <= 0.11 else 0.0
     strength += 0.04 if higher_lows else 0.0
@@ -255,8 +255,8 @@ def detect_volatility_contraction(frame: pd.DataFrame) -> PatternMatch | None:
     strength += _score_band(close_ratio, ((1.002, 0.2), (0.99, 0.15), (0.975, 0.09)))
     strength += 0.14 if trend_supportive else 0.0
     strength += _score_band(
-        latest["volume_ratio"],
-        ((1.35, 0.1), (1.0, 0.06), (0.85, 0.03)),
+        latest["volume_expansion_ratio_3d"],
+        ((1.25, 0.1), (1.0, 0.06), (0.85, 0.03)),
     )
     strength += _score_band(
         latest["rsi14"],
@@ -301,7 +301,7 @@ def detect_support_bounce(frame: pd.DataFrame) -> PatternMatch | None:
     )
     short_term_recovery = latest["Close"] >= frame.iloc[-3:]["Close"].mean() * 0.995
     holding_recent_low = latest["Close"] >= recent["Low"].min() * 1.002
-    volume_supportive = latest["volume_ratio"] >= 0.9
+    volume_supportive = latest["volume_expansion_ratio_3d"] >= 0.95
     bullish_day = latest["Close"] > latest["Open"] or latest["Close"] > frame.iloc[-2]["Close"]
     rebound_from_support = close_position >= 0.55 or bullish_day or short_term_recovery
 
@@ -319,8 +319,8 @@ def detect_support_bounce(frame: pd.DataFrame) -> PatternMatch | None:
         ((22.0, 0.12), (18.0, 0.08)),
     ) if latest["rsi14"] <= 45 else _score_band(latest["rsi14"], ((45.0, 0.08),))
     strength += _score_band(
-        latest["volume_ratio"],
-        ((1.25, 0.1), (0.95, 0.06), (0.75, 0.03)),
+        latest["volume_expansion_ratio_3d"],
+        ((1.15, 0.1), (0.95, 0.06), (0.75, 0.03)),
     )
     strength += 0.04 if latest["Close"] >= latest["ema20"] * 0.92 else 0.0
     strength += 0.03 if latest["Close"] >= latest["ema50"] * 0.9 else 0.0

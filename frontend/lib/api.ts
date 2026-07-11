@@ -8,7 +8,7 @@ import {
 } from "../types";
 
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api";
+  stripTrailingSlash(process.env.NEXT_PUBLIC_API_BASE_URL || "/api-proxy");
 
 interface ScanPayload {
   universe: ScanUniverse;
@@ -34,6 +34,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return (await response.json()) as T;
+}
+
+function stripTrailingSlash(value: string) {
+  return value.replace(/\/+$/, "");
 }
 
 export function getStocks(universe: ScanUniverse): Promise<StockSummary[]> {

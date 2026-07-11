@@ -122,6 +122,11 @@ npm run dev
 
 Frontend URL: `http://localhost:3000`
 
+When `NEXT_PUBLIC_API_BASE_URL` is not set, the Next.js app now uses a local
+`/api-proxy` rewrite. In development that rewrite points to
+`http://localhost:8000/api`, and in production it points to the deployed
+backend API.
+
 ## Docker
 
 ```bash
@@ -135,6 +140,9 @@ with a two-service blueprint:
 
 - `naveen710-swing-api`: FastAPI backend
 - `naveen710-swing-web`: Next.js frontend
+- `naveen710-swing-alerts`: Node.js worker that runs the scanner at
+  `9:00 AM IST`, sends hourly updates through the session, and posts email plus
+  CallMeBot WhatsApp alerts
 - `naveen710-swing-daily-email`: daily cron job that scans all three universes
   and emails the ranked results at 9:00 AM IST (`30 3 * * *` in Render's UTC
   cron schedule)
@@ -149,8 +157,34 @@ Before using it on Render:
 4. For the daily email job, set these environment variables in Render:
    `EMAIL_FROM_ADDRESS`, `EMAIL_SMTP_USERNAME`, and `EMAIL_SMTP_PASSWORD`.
    Gmail works well here with `smtp.gmail.com:587` and an app password.
-5. The cron service uses a paid Render plan because Render cron jobs are not
+5. For the Node alert worker, copy
+   [alerts/.env.example](/C:/Users/prave/OneDrive/Documents/Playground/alerts/.env.example)
+   into Render env vars and make sure `NSE_MARKET_HOLIDAYS`, `SMTP_USER`,
+   `SMTP_PASS`, `ALERT_EMAIL_FROM`, `WHATSAPP_PHONE`, and `WHATSAPP_API_KEY`
+   are filled in.
+6. The cron service uses a paid Render plan because Render cron jobs are not
    available on the free tier.
+
+## Netlify
+
+The frontend can also be hosted on Netlify from the same repo. This repo now
+includes [netlify.toml](/C:/Users/prave/OneDrive/Documents/Playground/netlify.toml),
+which tells Netlify to build the `frontend/` app and proxy browser API requests
+through the Next.js server to the live backend API.
+
+That means:
+
+- the UI can move to Netlify without changing the browser code
+- the FastAPI scanner and email jobs can stay on the existing backend host
+- frontend API requests do not rely on direct browser CORS access to the backend
+
+Before using Netlify:
+
+1. Import the GitHub repo into Netlify.
+2. Leave the base directory and build command from `netlify.toml` as-is.
+3. If you move the backend later, update `API_PROXY_TARGET` in Netlify.
+4. Keep the alert worker and daily cron on a backend-capable platform because
+   the scanner and mail jobs are still long-running server workloads.
 
 ## API endpoints
 

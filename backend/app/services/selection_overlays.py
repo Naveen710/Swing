@@ -60,6 +60,7 @@ def build_accumulation_snapshot(
         return AccumulationSnapshot(
             score=0.5,
             up_volume_ratio_10d=1.0,
+            volume_expansion_ratio_3d=1.0,
             atr_contraction_ratio=1.0,
             closes_near_high_10d=0,
             average_delivery_pct_10d=None,
@@ -72,6 +73,7 @@ def build_accumulation_snapshot(
     up_volume = float(recent.loc[close_delta >= 0, "Volume"].sum())
     down_volume = float(recent.loc[close_delta < 0, "Volume"].sum())
     up_volume_ratio = up_volume / max(down_volume, 1.0)
+    volume_expansion_ratio_3d = float(frame["volume_expansion_ratio_3d"].iloc[-1])
 
     atr_pct = (frame["atr14"] / frame["Close"].replace(0, pd.NA)).fillna(0.0)
     recent_atr = float(atr_pct.tail(5).mean())
@@ -90,6 +92,13 @@ def build_accumulation_snapshot(
         score += 0.2
     elif up_volume_ratio >= 0.95:
         score += 0.12
+
+    if volume_expansion_ratio_3d >= 1.5:
+        score += 0.18
+    elif volume_expansion_ratio_3d >= 1.2:
+        score += 0.12
+    elif volume_expansion_ratio_3d >= 1.0:
+        score += 0.06
 
     if atr_contraction_ratio <= 0.85:
         score += 0.24
@@ -138,6 +147,7 @@ def build_accumulation_snapshot(
     return AccumulationSnapshot(
         score=round(min(score, 0.95), 3),
         up_volume_ratio_10d=round(up_volume_ratio, 2),
+        volume_expansion_ratio_3d=round(volume_expansion_ratio_3d, 2),
         atr_contraction_ratio=round(atr_contraction_ratio, 2),
         closes_near_high_10d=closes_near_high,
         average_delivery_pct_10d=average_delivery_pct,

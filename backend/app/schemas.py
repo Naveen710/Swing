@@ -49,6 +49,9 @@ class IndicatorSnapshot(BaseModel):
     rsi14: float
     atr14: float
     volume_ratio: float
+    volume_expansion_ratio_3d: float
+    roc_20d_pct: float
+    rsi_slope_5d: float
     price_vs_ema20_pct: float
 
 
@@ -77,6 +80,7 @@ class LiquiditySnapshot(BaseModel):
 class AccumulationSnapshot(BaseModel):
     score: float
     up_volume_ratio_10d: float
+    volume_expansion_ratio_3d: float
     atr_contraction_ratio: float
     closes_near_high_10d: int
     average_delivery_pct_10d: float | None
@@ -98,8 +102,12 @@ class SectorStrengthSnapshot(BaseModel):
 class EventRiskSnapshot(BaseModel):
     earnings_date: date | None
     days_to_earnings: int | None
+    event_date: date | None
+    days_to_event: int | None
+    event_type: str | None
     risk_level: str
     ranking_penalty: float
+    blocked: bool
 
 
 class BacktestStats(BaseModel):
@@ -127,6 +135,7 @@ class TradeSetup(BaseModel):
     risk_reward_ratio: float
     probability_score: float
     ranking_score: float
+    breakout_quality_score: float
     expected_profit_amount: float
     expected_return_pct: float
     estimated_target_sessions: int

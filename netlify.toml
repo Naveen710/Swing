@@ -1,0 +1,7 @@
+[build]
+  base = "frontend"
+  command = "npm install && npm run build"
+
+[build.environment]
+  NODE_VERSION = "22.14.0"
+  API_PROXY_TARGET = "https://naveen710-swing-api.onrender.com/api"

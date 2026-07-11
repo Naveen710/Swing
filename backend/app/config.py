@@ -74,17 +74,26 @@ class Settings:
         os.getenv("MID_SMALL_PARALLEL_WORKERS", "10")
     )
     async_scan_universe_threshold: int = int(
-        os.getenv("ASYNC_SCAN_UNIVERSE_THRESHOLD", "500")
+        os.getenv("ASYNC_SCAN_UNIVERSE_THRESHOLD", "200")
     )
     default_investment_amount: int = int(
         os.getenv("DEFAULT_INVESTMENT_AMOUNT", "100000")
     )
     default_scan_lookback: int = int(os.getenv("DEFAULT_SCAN_LOOKBACK", "300"))
+    scan_result_cache_ttl_minutes: int = int(
+        os.getenv("SCAN_RESULT_CACHE_TTL_MINUTES", "15")
+    )
     liquidity_filter_min_avg_traded_value_inr: float = float(
         os.getenv("LIQUIDITY_FILTER_MIN_AVG_TRADED_VALUE_INR", "50000000")
     )
+    weak_market_sector_limit: int = int(
+        os.getenv("WEAK_MARKET_SECTOR_LIMIT", "3")
+    )
     event_risk_review_limit: int = int(os.getenv("EVENT_RISK_REVIEW_LIMIT", "80"))
     event_risk_window_days: int = int(os.getenv("EVENT_RISK_WINDOW_DAYS", "7"))
+    event_risk_exclusion_trading_days: int = int(
+        os.getenv("EVENT_RISK_EXCLUSION_TRADING_DAYS", "5")
+    )
     event_risk_high_penalty_days: int = int(
         os.getenv("EVENT_RISK_HIGH_PENALTY_DAYS", "3")
     )
