@@ -6,6 +6,7 @@ import { startTransition, useEffect, useMemo, useState } from "react";
 import { getLatestSignals, getScanStatus, getStocks, runScan } from "../lib/api";
 import { ScanUniverse, StockSummary, TradeSetup } from "../types";
 import { OpportunitiesTable } from "./opportunities-table";
+import { TradingSystemPanel } from "./trading-system-panel";
 
 const DEFAULT_INVESTMENT = 100000;
 const DEFAULT_UNIVERSE: ScanUniverse = "nifty500";
@@ -31,6 +32,7 @@ export function DashboardShell() {
   const [maxResults, setMaxResults] = useState(12);
   const [investmentAmount, setInvestmentAmount] = useState(DEFAULT_INVESTMENT);
   const [selectedSector, setSelectedSector] = useState("All sectors");
+  const [showTradingSystem, setShowTradingSystem] = useState(false);
 
   async function refreshDashboard(
     preferredUniverse?: ScanUniverse,
@@ -318,6 +320,12 @@ export function DashboardShell() {
               >
                 {refreshing ? "Refreshing..." : "Refresh results"}
               </button>
+              <button
+                className={showTradingSystem ? "primary-button" : "secondary-button"}
+                onClick={() => setShowTradingSystem((v) => !v)}
+              >
+                {showTradingSystem ? "Hide trading system" : "Trading system"}
+              </button>
             </div>
           </div>
 
@@ -413,6 +421,8 @@ export function DashboardShell() {
           <OpportunitiesTable signals={signals} />
         )}
       </section>
+
+      {showTradingSystem && <TradingSystemPanel />}
     </main>
   );
 }
