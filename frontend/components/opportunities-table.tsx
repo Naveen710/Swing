@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { QualityBadges } from "./quality-badges";
+
 import { TradeSetup } from "../types";
 
 export function OpportunitiesTable({ signals }: { signals: TradeSetup[] }) {
@@ -36,6 +38,7 @@ export function OpportunitiesTable({ signals }: { signals: TradeSetup[] }) {
                   {signal.symbol}
                 </Link>
                 <div className="table-subtext">{signal.company_name}</div>
+                <QualityBadges setup={signal} />
                 <div className="table-subtext">
                   20D TV {signal.liquidity.average_traded_value_20d_cr.toFixed(1)} Cr
                 </div>

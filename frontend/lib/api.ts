@@ -1,4 +1,5 @@
 import {
+  MarketRegimeSnapshot,
   ScanUniverse,
   ScanResponse,
   ScanStatusResponse,
@@ -58,4 +59,8 @@ export function getScanStatus(): Promise<ScanStatusResponse> {
 
 export function getStockDetail(symbol: string): Promise<StockDetailResponse> {
   return request<StockDetailResponse>(`/stock/${encodeURIComponent(symbol)}`);
+}
+
+export function getMarketRegime(refresh = false): Promise<MarketRegimeSnapshot> {
+  return request<MarketRegimeSnapshot>(`/regime${refresh ? "?refresh=true" : ""}`);
 }

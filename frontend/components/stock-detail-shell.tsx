@@ -5,6 +5,16 @@ import { useEffect, useState } from "react";
 
 import { getStockDetail } from "../lib/api";
 import { StockDetailResponse } from "../types";
+import {
+  fmtINR as fmtRupee,
+  positionQty,
+  tradeFromSetup,
+  useJournal,
+  useTradingSettings,
+  useWatchlist,
+  watchFromSetup,
+} from "../lib/store";
+import { AppNav } from "./app-nav";
 import { PriceChart } from "./price-chart";
 
 export function StockDetailShell({ symbol }: { symbol: string }) {
@@ -12,6 +22,10 @@ export function StockDetailShell({ symbol }: { symbol: string }) {
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error,      setError]      = useState<string | null>(null);
+  const [journal, setJournal] = useJournal();
+  const [watchlist, setWatchlist] = useWatchlist();
+  const [settings] = useTradingSettings();
+  const [notice, setNotice] = useState<string | null>(null);
 
   async function loadDetail(options?: { silent?: boolean }) {
     if (!options?.silent) setRefreshing(true);
@@ -53,6 +67,7 @@ export function StockDetailShell({ symbol }: { symbol: string }) {
 
   return (
     <main className="page-shell">
+      <AppNav />
 
       {/* ── Nav ── */}
       <div className="sd-nav">
@@ -101,6 +116,26 @@ export function StockDetailShell({ symbol }: { symbol: string }) {
               <span className="sd-chip">{s.estimated_target_sessions} sessions</span>
               <span className="sd-chip">{fmtDate(String(s.estimated_target_date))}</span>
             </div>
+            <div className="sd-sc-actions">
+              {(() => {
+                const held = journal.some((t) => t.status === "open" && t.symbol === s.symbol);
+                const watched = watchlist.some((w) => w.symbol === s.symbol);
+                const qty = positionQty(s.entry_price, s.stop_loss, settings);
+                return (
+                  <>
+                    <button className="mini-btn mini-btn--primary" disabled={held}
+                      onClick={() => { setJournal((prev) => [tradeFromSetup(s, qty), ...prev]); setNotice(`Logged ${qty} shares — confirm the fill in the Journal.`); }}>
+                      {held ? "In journal" : `Log trade · ${qty} sh`}
+                    </button>
+                    <button className="mini-btn" disabled={watched}
+                      onClick={() => { setWatchlist((prev) => [watchFromSetup(s), ...prev]); setNotice("Added to watchlist for 7 days."); }}>
+                      {watched ? "Watching" : "Watch"}
+                    </button>
+                  </>
+                );
+              })()}
+            </div>
+            {notice && <p className="sd-notice">{notice}</p>}
           </div>
         )}
       </section>
@@ -118,6 +153,69 @@ export function StockDetailShell({ symbol }: { symbol: string }) {
 
       {s && (
         <>
+          {/* ── Quality gates ── */}
+          <section className="panel sd-panel">
+            <h2 className="sd-ptitle">Quality gates</h2>
+            {s.quality_flags && s.quality_flags.length > 0 ? (
+              <div className="sd-flags">
+                {s.quality_flags.map((f) => <div key={f} className="sd-flag">⚠ {f}</div>)}
+              </div>
+            ) : (
+              <div className="sd-flags"><div className="sd-flag sd-flag--ok">✓ No blocking issues found by the overlay checks</div></div>
+            )}
+            <div className="sd-ind-grid">
+              {s.price_levels && (
+                <IndCard label="52-week high"
+                  value={s.price_levels.price_discovery ? "New high" : `${s.price_levels.distance_from_52w_high_pct.toFixed(1)}% below`}
+                  sub={`High ${fmtRupee(s.price_levels.high_52w)} · Low ${fmtRupee(s.price_levels.low_52w)}`}
+                  ok={s.price_levels.near_52w_high} />
+              )}
+              {s.weekly_trend && (
+                <IndCard label="Weekly alignment" value={`${s.weekly_trend.checks_passed}/3 checks`}
+                  sub={[
+                    s.weekly_trend.above_weekly_ema20 ? "✓ above 20W EMA" : "✗ below 20W EMA",
+                    s.weekly_trend.weekly_rsi_above_50 ? `✓ RSI ${s.weekly_trend.weekly_rsi14.toFixed(0)}` : `✗ RSI ${s.weekly_trend.weekly_rsi14.toFixed(0)}`,
+                    s.weekly_trend.weekly_volume_rising ? "✓ volume rising" : "✗ volume fading",
+                  ].join(" · ")}
+                  ok={s.weekly_trend.aligned} />
+              )}
+              {s.peer_rank && (
+                <IndCard label={`Rank in ${s.peer_rank.sector}`} value={`#${s.peer_rank.rank} of ${s.peer_rank.peer_count}`}
+                  sub={s.peer_rank.sector_leader ? "Sector leader ✓" : s.peer_rank.top_peers.length ? `Stronger: ${s.peer_rank.top_peers.join(", ")}` : "Mid-pack"}
+                  ok={s.peer_rank.sector_leader ? true : s.peer_rank.sector_laggard ? false : undefined} />
+              )}
+              <IndCard label="Next results"
+                value={s.event_risk.earnings_date ? fmtDate(String(s.event_risk.earnings_date)) : "Unknown"}
+                sub={s.event_risk.blackout ? "Inside blackout — do not enter" : s.event_risk.days_to_earnings !== null ? `${s.event_risk.days_to_earnings} days away` : "Check the NSE corporate calendar"}
+                ok={s.event_risk.blackout ? false : s.event_risk.earnings_date ? true : undefined} />
+              <IndCard label="Ex-dividend"
+                value={s.event_risk.ex_dividend_date ? fmtDate(String(s.event_risk.ex_dividend_date)) : "None scheduled"}
+                sub={s.event_risk.days_to_ex_dividend != null ? `${s.event_risk.days_to_ex_dividend} days — price drops by the dividend` : "No upcoming ex-date found"} />
+            </div>
+
+            {s.fundamentals && s.fundamentals.checks_available > 0 && (
+              <>
+                <h3 className="sd-subtitle">
+                  Fundamental quality · {s.fundamentals.quality_score}/{s.fundamentals.checks_available}
+                  {s.fundamentals.passes === false && <span className="q-bad"> — fails the gate</span>}
+                  {s.fundamentals.passes === true && <span className="q-ok"> — passes</span>}
+                </h3>
+                <div className="sd-ind-grid">
+                  <IndCard label="Revenue growth" value={fmtPctOrDash(s.fundamentals.revenue_growth_pct)} sub="Target > 0%"
+                    ok={s.fundamentals.revenue_growth_pct === null ? undefined : s.fundamentals.revenue_growth_pct > 0} />
+                  <IndCard label="Profit margin" value={fmtPctOrDash(s.fundamentals.profit_margin_pct)} sub="Target > 8%"
+                    ok={s.fundamentals.profit_margin_pct === null ? undefined : s.fundamentals.profit_margin_pct > 8} />
+                  <IndCard label="Debt / equity" value={s.fundamentals.debt_to_equity === null ? "—" : `${s.fundamentals.debt_to_equity.toFixed(2)}×`} sub="Target < 1.5×"
+                    ok={s.fundamentals.debt_to_equity === null ? undefined : s.fundamentals.debt_to_equity < 1.5} />
+                  <IndCard label="ROE" value={fmtPctOrDash(s.fundamentals.return_on_equity_pct)} sub="Target > 12%"
+                    ok={s.fundamentals.return_on_equity_pct === null ? undefined : s.fundamentals.return_on_equity_pct > 12} />
+                  <IndCard label="Insider / promoter holding" value={fmtPctOrDash(s.fundamentals.insider_holding_pct)} sub="Pledge data not included" />
+                  <IndCard label="Institutional holding" value={fmtPctOrDash(s.fundamentals.institutional_holding_pct)} sub="FII + DII + funds" />
+                </div>
+              </>
+            )}
+          </section>
+
           {/* ── Trade setup ── */}
           <section className="panel sd-panel">
             <h2 className="sd-ptitle">Trade setup</h2>
@@ -380,6 +478,12 @@ export function StockDetailShell({ symbol }: { symbol: string }) {
         .sd-sc-sub { font-size:0.72rem; color:var(--muted); }
         .sd-sc-arrow { color:var(--muted); font-size:1rem; text-align:center; padding-top:12px; }
         .sd-sc-chips { display:flex; flex-wrap:wrap; gap:6px; }
+        .sd-sc-actions { display:flex; gap:8px; margin-top:14px; }
+        .sd-notice { font-size:0.8rem; color:var(--accent); margin:8px 0 0; }
+        .sd-flags { display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
+        .sd-flag { font-size:0.88rem; font-weight:600; color:var(--red); background:rgba(185,75,81,0.07); border:1px solid rgba(185,75,81,0.18); border-radius:12px; padding:8px 12px; }
+        .sd-flag--ok { color:var(--green); background:rgba(22,108,90,0.07); border-color:rgba(22,108,90,0.18); }
+        .sd-subtitle { font-size:0.95rem; margin:20px 0 12px; font-family:var(--font-space-grotesk),sans-serif; }
         .sd-chip { font-size:0.78rem; font-weight:600; padding:4px 10px; border-radius:999px; background:rgba(255,255,255,0.8); border:1px solid var(--line); }
 
         /* ── Panels ── */
@@ -537,6 +641,9 @@ function fmtNum(n: number) {
 }
 function fmtDate(s: string) {
   return new Intl.DateTimeFormat("en-IN", { day:"2-digit", month:"short", year:"numeric" }).format(new Date(s));
+}
+function fmtPctOrDash(n: number | null) {
+  return n === null ? "—" : `${n.toFixed(1)}%`;
 }
 function fmtSigned(n: number) {
   return (n > 0 ? "+" : "") + n.toFixed(1);

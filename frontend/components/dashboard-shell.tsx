@@ -5,7 +5,9 @@ import { startTransition, useEffect, useMemo, useState } from "react";
 
 import { getLatestSignals, getScanStatus, getStocks, runScan } from "../lib/api";
 import { ScanUniverse, StockSummary, TradeSetup } from "../types";
+import { AppNav } from "./app-nav";
 import { OpportunitiesTable } from "./opportunities-table";
+import { RegimeBanner, useMarketRegime } from "./regime-banner";
 import { TradingSystemPanel } from "./trading-system-panel";
 
 const DEFAULT_INVESTMENT = 100000;
@@ -33,6 +35,7 @@ export function DashboardShell() {
   const [investmentAmount, setInvestmentAmount] = useState(DEFAULT_INVESTMENT);
   const [selectedSector, setSelectedSector] = useState("All sectors");
   const [showTradingSystem, setShowTradingSystem] = useState(false);
+  const marketRegime = useMarketRegime();
 
   async function refreshDashboard(
     preferredUniverse?: ScanUniverse,
@@ -218,6 +221,7 @@ export function DashboardShell() {
 
   return (
     <main className="page-shell">
+      <AppNav />
       <section className="hero-panel">
         <div>
           <p className="eyebrow">NSE systematic swing scanner</p>
@@ -252,6 +256,13 @@ export function DashboardShell() {
           )}
         </div>
       </section>
+
+      <RegimeBanner
+        regime={marketRegime.regime}
+        loading={marketRegime.loading}
+        error={marketRegime.error}
+        onRefresh={() => void marketRegime.reload(true)}
+      />
 
       <section className="stats-grid">
         <article className="stat-card">

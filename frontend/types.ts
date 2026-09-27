@@ -76,6 +76,73 @@ export interface EventRiskSnapshot {
   days_to_earnings: number | null;
   risk_level: string;
   ranking_penalty: number;
+  ex_dividend_date?: string | null;
+  days_to_ex_dividend?: number | null;
+  blackout?: boolean;
+}
+
+export interface PriceLevelSnapshot {
+  high_52w: number;
+  low_52w: number;
+  distance_from_52w_high_pct: number;
+  near_52w_high: boolean;
+  price_discovery: boolean;
+}
+
+export interface WeeklyTrendSnapshot {
+  weekly_close: number;
+  weekly_ema20: number;
+  weekly_rsi14: number;
+  above_weekly_ema20: boolean;
+  weekly_rsi_above_50: boolean;
+  weekly_volume_rising: boolean;
+  checks_passed: number;
+  aligned: boolean;
+}
+
+export interface PeerRankSnapshot {
+  sector: string;
+  rank: number;
+  peer_count: number;
+  percentile: number;
+  sector_leader: boolean;
+  sector_laggard: boolean;
+  top_peers: string[];
+}
+
+export interface FundamentalSnapshot {
+  source: string;
+  revenue_growth_pct: number | null;
+  profit_margin_pct: number | null;
+  debt_to_equity: number | null;
+  return_on_equity_pct: number | null;
+  insider_holding_pct: number | null;
+  institutional_holding_pct: number | null;
+  quality_score: number;
+  checks_available: number;
+  passes: boolean | null;
+}
+
+export type RegimeName = "bull" | "neutral" | "bear" | "unknown";
+
+export interface MarketRegimeSnapshot {
+  regime: RegimeName;
+  score: number;
+  benchmark_name: string;
+  benchmark_close: number | null;
+  benchmark_above_ema50: boolean | null;
+  benchmark_above_ema200: boolean | null;
+  benchmark_ema50_above_ema200: boolean | null;
+  benchmark_return_20d_pct: number | null;
+  vix: number | null;
+  breadth_above_ema50_pct: number | null;
+  breadth_sample_size: number;
+  breadth_source: string;
+  recommended_min_probability: number;
+  recommended_min_risk_reward: number;
+  position_size_multiplier: number;
+  notes: string[];
+  generated_at: string;
 }
 
 export interface BacktestStats {
@@ -115,6 +182,11 @@ export interface TradeSetup {
   sector_strength: SectorStrengthSnapshot;
   event_risk: EventRiskSnapshot;
   backtest: BacktestStats;
+  price_levels?: PriceLevelSnapshot | null;
+  weekly_trend?: WeeklyTrendSnapshot | null;
+  peer_rank?: PeerRankSnapshot | null;
+  fundamentals?: FundamentalSnapshot | null;
+  quality_flags?: string[];
 }
 
 export interface ScanResponse {
