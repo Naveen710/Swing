@@ -11,8 +11,12 @@ from app.schemas import (
     AccumulationSnapshot,
     BacktestStats,
     EventRiskSnapshot,
+    FundamentalSnapshot,
     IndicatorSnapshot,
     LiquiditySnapshot,
+    MarketRegimeSnapshot,
+    PeerRankSnapshot,
+    PriceLevelSnapshot,
     RelativeStrengthSnapshot,
     ScanRequest,
     ScanResponse,
@@ -20,10 +24,18 @@ from app.schemas import (
     SectorStrengthSnapshot,
     StockDetailResponse,
     TradeSetup,
+    WeeklyTrendSnapshot,
 )
 from app.services.backtest import backtest_pattern
 from app.services.delivery_data import DeliveryTrend, NseDeliveryDataProvider
 from app.services.event_risk import YahooEventRiskProvider
+from app.services.fundamentals import YahooFundamentalsProvider, unknown_fundamentals
+from app.services.market_regime import MarketRegimeService
+from app.services.trend_overlays import (
+    build_peer_ranks,
+    build_price_levels,
+    build_weekly_trend,
+)
 from app.services.indicators import apply_indicators
 from app.services.market_data import MarketDataError, create_market_data_provider
 from app.services.patterns import PatternMatch, detect_best_pattern
@@ -69,6 +81,27 @@ class TradeCandidate:
     sector_strength: SectorStrengthSnapshot
     event_risk: EventRiskSnapshot
     setup_state: str
+    price_levels: PriceLevelSnapshot | None = None
+    weekly_trend: WeeklyTrendSnapshot | None = None
+    peer_rank: PeerRankSnapshot | None = None
+    fundamentals: FundamentalSnapshot | None = None
+
+
+@dataclass
+class ScanSink:
+    """Collects universe-wide facts while scanning (peer RS scores and market breadth)."""
+
+    scores: dict[str, tuple[str, float]] = field(default_factory=dict)
+    above_ema50: int = 0
+    total: int = 0
+    lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def record(self, symbol: str, sector: str, rs_score: float, above_ema50: bool) -> None:
+        with self.lock:
+            self.scores[symbol] = (sector, rs_score)
+            self.total += 1
+            if above_ema50:
+                self.above_ema50 += 1
 
 
 @dataclass
@@ -80,6 +113,7 @@ class ActiveScanState:
     delivery_trends: dict[str, DeliveryTrend] = field(default_factory=dict)
     candidates: list[TradeCandidate] = field(default_factory=list)
     cursor: int = 0
+    sink: ScanSink = field(default_factory=ScanSink)
 
 
 class ScannerService:
@@ -87,6 +121,8 @@ class ScannerService:
         self.market_data = create_market_data_provider()
         self.delivery_data = NseDeliveryDataProvider()
         self.event_risk = YahooEventRiskProvider()
+        self.fundamentals = YahooFundamentalsProvider()
+        self.regime = MarketRegimeService(self.market_data)
         self._active_scan: ActiveScanState | None = None
         self._active_scan_lock = threading.Lock()
 
@@ -173,13 +209,16 @@ class ScannerService:
     ) -> ScanResponse:
         benchmark_context = self._load_benchmark_context(request.lookback_days)
         delivery_trends = self._load_delivery_trends(benchmark_context)
+        sink = ScanSink()
         candidates = self._collect_candidates(
             listings,
             request,
             benchmark_context,
             delivery_trends,
+            sink,
         )
-        candidates = self._apply_candidate_overlays(candidates, request)
+        self.regime.record_scan_breadth(sink.above_ema50, sink.total)
+        candidates = self._apply_candidate_overlays(candidates, request, sink)
         candidates.sort(
             key=lambda candidate: (
                 candidate.ranking_score,
@@ -213,6 +252,9 @@ class ScannerService:
         universe: ScanUniverse | None = None,
     ) -> list[TradeSetup]:
         return signal_store.all(universe=universe)
+
+    def market_regime(self, force: bool = False) -> MarketRegimeSnapshot:
+        return self.regime.get_snapshot(force=force)
 
     def scan_status(self):
         (
@@ -286,6 +328,7 @@ class ScannerService:
         request: ScanRequest,
         benchmark_context: RelativeStrengthContext | None,
         delivery_trends: dict[str, DeliveryTrend],
+        sink: ScanSink | None = None,
     ) -> TradeCandidate | None:
         try:
             history = self.market_data.get_history(
@@ -294,6 +337,14 @@ class ScannerService:
             )
             enriched = apply_indicators(history)
             relative_strength = build_relative_strength_snapshot(enriched, benchmark_context)
+            if sink is not None and len(enriched) >= 60:
+                latest_row = enriched.iloc[-1]
+                sink.record(
+                    listing.symbol,
+                    listing.sector,
+                    relative_strength.score,
+                    bool(latest_row["Close"] > latest_row["ema50"]),
+                )
             match = detect_best_pattern(enriched, relative_strength)
             if match is None:
                 return None
@@ -367,6 +418,12 @@ class ScannerService:
                 3,
             ),
         )
+        price_levels = build_price_levels(frame)
+        weekly_trend = build_weekly_trend(frame)
+        overlay_prob, overlay_rank = self._trend_overlay_adjustments(
+            price_levels, weekly_trend, float(latest["volume_ratio"])
+        )
+        probability = round(min(0.95, max(0.35, probability + overlay_prob)), 3)
         expected_return_pct = round(((target_price / entry) - 1) * 100, 2)
         expected_profit_amount = round(
             investment_amount * (expected_return_pct / 100) * probability,
@@ -381,7 +438,8 @@ class ScannerService:
         ranking_score = round(
             ranking_score
             + accumulation.score * 0.08
-            + liquidity.score * 0.05,
+            + liquidity.score * 0.05
+            + overlay_rank,
             3,
         )
 
@@ -423,6 +481,8 @@ class ScannerService:
             sector_strength=self._neutral_sector_strength(listing.sector),
             event_risk=self._neutral_event_risk(),
             setup_state=setup_state,
+            price_levels=price_levels,
+            weekly_trend=weekly_trend,
         )
 
     def _finalize_trade_setup(
@@ -498,6 +558,9 @@ class ScannerService:
             )
         )
 
+        quality_flags = self._build_quality_flags(candidate, estimated_target_sessions)
+        reason += self._build_overlay_note(candidate)
+
         return TradeSetup(
             symbol=candidate.listing.symbol,
             company_name=candidate.listing.company_name,
@@ -523,6 +586,11 @@ class ScannerService:
             sector_strength=candidate.sector_strength,
             event_risk=candidate.event_risk,
             backtest=backtest,
+            price_levels=candidate.price_levels,
+            weekly_trend=candidate.weekly_trend,
+            peer_rank=candidate.peer_rank,
+            fundamentals=candidate.fundamentals,
+            quality_flags=quality_flags,
         )
 
     def _score_probability(self, latest, match: PatternMatch) -> float:
@@ -546,6 +614,7 @@ class ScannerService:
         self,
         candidates: list[TradeCandidate],
         request: ScanRequest,
+        sink: ScanSink | None = None,
     ) -> list[TradeCandidate]:
         if not candidates:
             return []
@@ -573,11 +642,166 @@ class ScannerService:
             for candidate in candidates
         ]
 
-        if request.universe != ScanUniverse.MID_SMALL_2000_PLUS:
-            return enriched
+        if sink is not None and sink.scores:
+            enriched = self._apply_peer_rank_overlay(enriched, sink)
 
-        advanced = [self._apply_advanced_discovery_score(candidate) for candidate in enriched]
-        return self._apply_event_risk_overlay(advanced)
+        if request.universe == ScanUniverse.MID_SMALL_2000_PLUS:
+            enriched = [self._apply_advanced_discovery_score(candidate) for candidate in enriched]
+
+        if self._external_overlays_enabled():
+            enriched = self._apply_event_risk_overlay(enriched)
+            enriched = self._apply_fundamentals_overlay(enriched)
+
+        return [
+            candidate
+            for candidate in enriched
+            if candidate.probability_score >= request.min_probability
+        ]
+
+    def _external_overlays_enabled(self) -> bool:
+        return settings.enable_external_overlays and settings.market_data_provider != "demo"
+
+    def _trend_overlay_adjustments(
+        self,
+        price_levels: PriceLevelSnapshot | None,
+        weekly_trend: WeeklyTrendSnapshot | None,
+        volume_ratio: float,
+    ) -> tuple[float, float]:
+        prob = rank = 0.0
+        if price_levels is not None:
+            if price_levels.near_52w_high:
+                bump = 0.05 if volume_ratio >= 1.2 else 0.02
+                prob += bump
+                rank += bump
+            if price_levels.price_discovery:
+                prob += 0.03
+                rank += 0.04
+        if weekly_trend is not None:
+            if weekly_trend.aligned:
+                prob += 0.02
+                rank += 0.02
+            else:
+                prob -= 0.06
+                rank -= 0.06
+        return prob, rank
+
+    def _apply_peer_rank_overlay(
+        self,
+        candidates: list[TradeCandidate],
+        sink: ScanSink,
+    ) -> list[TradeCandidate]:
+        with sink.lock:
+            scores = dict(sink.scores)
+        ranks = build_peer_ranks(scores, [c.listing.symbol for c in candidates])
+        adjusted: list[TradeCandidate] = []
+        for candidate in candidates:
+            peer = ranks.get(candidate.listing.symbol)
+            if peer is None:
+                adjusted.append(candidate)
+                continue
+            prob_adj = 0.02 if peer.sector_leader else -0.03 if peer.sector_laggard else 0.0
+            rank_adj = 0.03 if peer.sector_leader else -0.03 if peer.sector_laggard else 0.0
+            adjusted.append(
+                replace(
+                    candidate,
+                    peer_rank=peer,
+                    probability_score=round(
+                        min(0.95, max(0.35, candidate.probability_score + prob_adj)), 3
+                    ),
+                    ranking_score=round(candidate.ranking_score + rank_adj, 3),
+                )
+            )
+        return adjusted
+
+    def _apply_fundamentals_overlay(
+        self,
+        candidates: list[TradeCandidate],
+    ) -> list[TradeCandidate]:
+        ordered = sorted(candidates, key=lambda c: c.ranking_score, reverse=True)
+        review = ordered[: max(0, settings.fundamentals_review_limit)]
+        if not review:
+            return candidates
+        with ThreadPoolExecutor(max_workers=max(1, settings.overlay_workers)) as executor:
+            snapshots = dict(
+                zip(
+                    [c.listing.symbol for c in review],
+                    executor.map(lambda c: self.fundamentals.get_snapshot(c.listing.symbol), review),
+                )
+            )
+        adjusted: list[TradeCandidate] = []
+        for candidate in candidates:
+            snapshot = snapshots.get(candidate.listing.symbol)
+            if snapshot is None:
+                adjusted.append(replace(candidate, fundamentals=unknown_fundamentals("not_reviewed")))
+                continue
+            prob_adj = rank_adj = 0.0
+            if snapshot.passes is False:
+                prob_adj, rank_adj = -0.06, -0.06
+            elif snapshot.passes and snapshot.quality_score >= 3:
+                prob_adj, rank_adj = 0.01, 0.02
+            adjusted.append(
+                replace(
+                    candidate,
+                    fundamentals=snapshot,
+                    probability_score=round(
+                        min(0.95, max(0.35, candidate.probability_score + prob_adj)), 3
+                    ),
+                    ranking_score=round(candidate.ranking_score + rank_adj, 3),
+                )
+            )
+        return adjusted
+
+    def _build_quality_flags(
+        self,
+        candidate: TradeCandidate,
+        estimated_target_sessions: int,
+    ) -> list[str]:
+        flags: list[str] = []
+        event = candidate.event_risk
+        if event.blackout and event.days_to_earnings is not None:
+            if event.days_to_earnings >= 0:
+                flags.append(f"Earnings in {event.days_to_earnings} days — blackout")
+            else:
+                flags.append("Results just announced — cooling off")
+        if (
+            event.days_to_ex_dividend is not None
+            and event.days_to_ex_dividend <= round(estimated_target_sessions * 1.45)
+        ):
+            flags.append(
+                f"Ex-dividend {event.ex_dividend_date.strftime('%d %b')} inside the trade window"
+            )
+        if candidate.weekly_trend is not None and not candidate.weekly_trend.aligned:
+            flags.append("Weekly trend not aligned")
+        if candidate.peer_rank is not None and candidate.peer_rank.sector_laggard:
+            peers = ", ".join(candidate.peer_rank.top_peers) or "sector leaders"
+            flags.append(f"Sector laggard — stronger peers: {peers}")
+        fundamentals = candidate.fundamentals
+        if fundamentals is not None and fundamentals.passes is False:
+            flags.append(
+                f"Weak fundamentals ({fundamentals.quality_score}/{fundamentals.checks_available})"
+            )
+        return flags
+
+    def _build_overlay_note(self, candidate: TradeCandidate) -> str:
+        parts: list[str] = []
+        levels = candidate.price_levels
+        if levels is not None:
+            if levels.price_discovery:
+                parts.append("Price discovery: fresh 52-week high within the last 5 sessions.")
+            elif levels.near_52w_high:
+                parts.append(
+                    f"Trading {levels.distance_from_52w_high_pct:.1f}% below its 52-week high."
+                )
+        weekly = candidate.weekly_trend
+        if weekly is not None:
+            parts.append(
+                f"Weekly chart {'confirms' if weekly.aligned else 'does not confirm'} "
+                f"({weekly.checks_passed}/3 checks, weekly RSI {weekly.weekly_rsi14:.0f})."
+            )
+        peer = candidate.peer_rank
+        if peer is not None:
+            parts.append(f"Sector RS rank {peer.rank}/{peer.peer_count} in {peer.sector}.")
+        return (" " + " ".join(parts)) if parts else ""
 
     def _apply_advanced_discovery_score(
         self,
@@ -633,11 +857,16 @@ class ScannerService:
         review_limit = min(len(sorted_candidates), settings.event_risk_review_limit)
         reviewed: dict[str, TradeCandidate] = {}
 
-        for candidate in sorted_candidates[:review_limit]:
-            event_risk = self.event_risk.get_snapshot(
-                candidate.listing.symbol,
-                candidate.reference_date,
+        to_review = sorted_candidates[:review_limit]
+        with ThreadPoolExecutor(max_workers=max(1, settings.overlay_workers)) as executor:
+            event_snapshots = list(
+                executor.map(
+                    lambda c: self.event_risk.get_snapshot(c.listing.symbol, c.reference_date),
+                    to_review,
+                )
             )
+
+        for candidate, event_risk in zip(to_review, event_snapshots):
             probability_score = round(
                 max(0.35, candidate.probability_score - event_risk.ranking_penalty * 0.35),
                 3,
@@ -736,6 +965,7 @@ class ScannerService:
         request: ScanRequest,
         benchmark_context: RelativeStrengthContext | None,
         delivery_trends: dict[str, DeliveryTrend],
+        sink: ScanSink | None = None,
     ) -> list[TradeCandidate]:
         return self._scan_chunk(
             listings,
@@ -743,6 +973,7 @@ class ScannerService:
             benchmark_context,
             delivery_trends,
             worker_count=self._resolve_worker_count(request, len(listings)),
+            sink=sink,
         )
 
     def _scan_chunk(
@@ -752,6 +983,7 @@ class ScannerService:
         benchmark_context: RelativeStrengthContext | None,
         delivery_trends: dict[str, DeliveryTrend],
         worker_count: int | None = None,
+        sink: ScanSink | None = None,
     ) -> list[TradeCandidate]:
         self._prefetch_histories(listings, request.lookback_days)
         with ThreadPoolExecutor(
@@ -767,6 +999,7 @@ class ScannerService:
                         request,
                         benchmark_context,
                         delivery_trends,
+                        sink,
                     ),
                     listings,
                 )
@@ -903,6 +1136,7 @@ class ScannerService:
                 state.benchmark_context,
                 state.delivery_trends,
                 total_listings=len(listings),
+                sink=state.sink,
             )
 
         partitions = self._partition_listings(listings, worker_count)
@@ -916,6 +1150,7 @@ class ScannerService:
                     state.benchmark_context,
                     state.delivery_trends,
                     len(listings),
+                    state.sink,
                 )
                 for partition in partitions
                 if partition
@@ -931,6 +1166,7 @@ class ScannerService:
         benchmark_context: RelativeStrengthContext | None,
         delivery_trends: dict[str, DeliveryTrend],
         total_listings: int,
+        sink: ScanSink | None = None,
     ) -> list[TradeCandidate]:
         self._prefetch_histories(listings, request.lookback_days)
         local_candidates: list[TradeCandidate] = []
@@ -940,6 +1176,7 @@ class ScannerService:
                 request,
                 benchmark_context,
                 delivery_trends,
+                sink,
             )
             if candidate is not None:
                 local_candidates.append(candidate)
@@ -982,7 +1219,10 @@ class ScannerService:
         return max(1, min(base_workers, listing_count))
 
     def _finish_incremental_scan(self, state: ActiveScanState) -> None:
-        state.candidates = self._apply_candidate_overlays(state.candidates, state.request)
+        self.regime.record_scan_breadth(state.sink.above_ema50, state.sink.total)
+        state.candidates = self._apply_candidate_overlays(
+            state.candidates, state.request, state.sink
+        )
         state.candidates.sort(
             key=lambda candidate: (
                 candidate.ranking_score,

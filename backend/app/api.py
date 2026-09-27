@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from app.config import settings
-from app.schemas import ScanRequest, ScanStatusResponse, ScanUniverse
+from app.schemas import MarketRegimeSnapshot, ScanRequest, ScanStatusResponse, ScanUniverse
 from app.services.scanner import scanner_service
 
 router = APIRouter()
@@ -40,6 +40,12 @@ def run_scan(request: ScanRequest):
 @router.get("/scan/status")
 def get_scan_status() -> ScanStatusResponse:
     return ScanStatusResponse(**scanner_service.scan_status())
+
+
+@router.get("/regime")
+def get_market_regime(refresh: bool = False) -> MarketRegimeSnapshot:
+    """Market regime: trend, breadth and volatility context plus recommended thresholds."""
+    return scanner_service.market_regime(force=refresh)
 
 
 @router.get("/stock/{symbol}")

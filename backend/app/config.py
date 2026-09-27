@@ -91,6 +91,16 @@ class Settings:
     event_risk_post_result_cooloff_days: int = int(
         os.getenv("EVENT_RISK_POST_RESULT_COOLOFF_DAYS", "2")
     )
+    earnings_blackout_days: int = int(os.getenv("EARNINGS_BLACKOUT_DAYS", "5"))
+    enable_external_overlays: bool = os.getenv("ENABLE_EXTERNAL_OVERLAYS", "1") == "1"
+    overlay_workers: int = int(os.getenv("OVERLAY_WORKERS", "8"))
+    fundamentals_review_limit: int = int(os.getenv("FUNDAMENTALS_REVIEW_LIMIT", "30"))
+    fundamentals_cache_ttl_minutes: int = int(
+        os.getenv("FUNDAMENTALS_CACHE_TTL_MINUTES", "1440")
+    )
+    regime_cache_ttl_minutes: int = int(os.getenv("REGIME_CACHE_TTL_MINUTES", "15"))
+    regime_breadth_sample: int = int(os.getenv("REGIME_BREADTH_SAMPLE", "60"))
+    vix_symbol: str = os.getenv("VIX_SYMBOL", "^INDIAVIX")
     event_data_cache_ttl_minutes: int = int(
         os.getenv("EVENT_DATA_CACHE_TTL_MINUTES", "360")
     )

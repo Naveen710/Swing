@@ -100,6 +100,71 @@ class EventRiskSnapshot(BaseModel):
     days_to_earnings: int | None
     risk_level: str
     ranking_penalty: float
+    ex_dividend_date: date | None = None
+    days_to_ex_dividend: int | None = None
+    blackout: bool = False
+
+
+class PriceLevelSnapshot(BaseModel):
+    high_52w: float
+    low_52w: float
+    distance_from_52w_high_pct: float
+    near_52w_high: bool
+    price_discovery: bool
+
+
+class WeeklyTrendSnapshot(BaseModel):
+    weekly_close: float
+    weekly_ema20: float
+    weekly_rsi14: float
+    above_weekly_ema20: bool
+    weekly_rsi_above_50: bool
+    weekly_volume_rising: bool
+    checks_passed: int
+    aligned: bool
+
+
+class PeerRankSnapshot(BaseModel):
+    sector: str
+    rank: int
+    peer_count: int
+    percentile: float
+    sector_leader: bool
+    sector_laggard: bool
+    top_peers: list[str] = Field(default_factory=list)
+
+
+class FundamentalSnapshot(BaseModel):
+    source: str
+    revenue_growth_pct: float | None = None
+    profit_margin_pct: float | None = None
+    debt_to_equity: float | None = None
+    return_on_equity_pct: float | None = None
+    insider_holding_pct: float | None = None
+    institutional_holding_pct: float | None = None
+    quality_score: int = 0
+    checks_available: int = 0
+    passes: bool | None = None
+
+
+class MarketRegimeSnapshot(BaseModel):
+    regime: str
+    score: float
+    benchmark_name: str
+    benchmark_close: float | None = None
+    benchmark_above_ema50: bool | None = None
+    benchmark_above_ema200: bool | None = None
+    benchmark_ema50_above_ema200: bool | None = None
+    benchmark_return_20d_pct: float | None = None
+    vix: float | None = None
+    breadth_above_ema50_pct: float | None = None
+    breadth_sample_size: int = 0
+    breadth_source: str = "unavailable"
+    recommended_min_probability: float
+    recommended_min_risk_reward: float
+    position_size_multiplier: float
+    notes: list[str] = Field(default_factory=list)
+    generated_at: datetime
 
 
 class BacktestStats(BaseModel):
@@ -139,6 +204,11 @@ class TradeSetup(BaseModel):
     sector_strength: SectorStrengthSnapshot
     event_risk: EventRiskSnapshot
     backtest: BacktestStats
+    price_levels: PriceLevelSnapshot | None = None
+    weekly_trend: WeeklyTrendSnapshot | None = None
+    peer_rank: PeerRankSnapshot | None = None
+    fundamentals: FundamentalSnapshot | None = None
+    quality_flags: list[str] = Field(default_factory=list)
 
 
 class ScanRequest(BaseModel):
