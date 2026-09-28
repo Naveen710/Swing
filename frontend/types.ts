@@ -155,6 +155,10 @@ export interface BacktestStats {
   target_hit_rate: number;
   average_holding_sessions: number;
   average_target_sessions: number | null;
+  signals?: number;
+  fill_rate?: number;
+  average_r?: number;
+  cost_pct?: number;
 }
 
 export interface TradeSetup {
@@ -187,6 +191,9 @@ export interface TradeSetup {
   peer_rank?: PeerRankSnapshot | null;
   fundamentals?: FundamentalSnapshot | null;
   quality_flags?: string[];
+  signal_date?: string | null;
+  historical_win_rate?: number | null;
+  calibration_samples?: number | null;
 }
 
 export interface ScanResponse {
@@ -207,6 +214,8 @@ export interface ScanStatusResponse {
   universe_size: number;
   scanned_symbols: number;
   latest_results_count: number;
+  data_rejected?: number;
+  data_rejected_examples?: string[];
 }
 
 export interface Candle {
@@ -222,4 +231,124 @@ export interface StockDetailResponse {
   stock: StockSummary;
   latest_signal: TradeSetup | null;
   candles: Candle[];
+}
+
+export interface OutcomeStats {
+  win_rate: number | null;
+  average_r: number | null;
+  average_return_pct: number | null;
+  profit_factor: number | null;
+}
+
+export interface LedgerGroup extends OutcomeStats {
+  key: string;
+  signals: number;
+  trades: number;
+  fill_rate: number | null;
+}
+
+export interface LedgerSignal {
+  id: number;
+  signal_date: string;
+  symbol: string;
+  company_name: string | null;
+  sector: string | null;
+  universe: string | null;
+  pattern: string;
+  regime: string | null;
+  entry: number;
+  stop: number;
+  target: number;
+  probability: number | null;
+  ranking_score: number | null;
+  risk_reward: number | null;
+  status: "pending" | "open" | "expired" | "target" | "stop" | "time";
+  fill_date: string | null;
+  fill_price: number | null;
+  exit_date: string | null;
+  exit_price: number | null;
+  sessions_held: number | null;
+  return_pct_net: number | null;
+  r_multiple_net: number | null;
+}
+
+export interface CalibrationModel {
+  samples: number;
+  base_win_rate: number;
+  spread?: number;
+  low_score_win_rate?: number;
+  high_score_win_rate?: number;
+  z_score?: number;
+  significant?: boolean;
+  bands: { band: string; score_from: number; score_to: number; trades: number; win_rate: number }[];
+  source: string;
+  fitted_at: string;
+}
+
+export interface PerformanceSummary extends OutcomeStats {
+  total_signals: number;
+  pending: number;
+  open: number;
+  expired: number;
+  closed: number;
+  fill_rate: number | null;
+  first_signal: string | null;
+  last_signal: string | null;
+  by_pattern: LedgerGroup[];
+  by_regime: LedgerGroup[];
+  by_probability_band: (OutcomeStats & { band: string; predicted: number; trades: number })[];
+  recent: LedgerSignal[];
+  persistent_storage: boolean;
+  calibration: CalibrationModel | null;
+}
+
+export interface PortfolioBacktestMetrics {
+  start: string;
+  end: string;
+  starting_capital: number;
+  final_equity: number;
+  total_return_pct: number;
+  cagr_pct: number;
+  benchmark_return_pct: number;
+  max_drawdown_pct: number;
+  trades: number;
+  exposure_pct: number;
+  open_positions_at_end: number;
+  avg_monthly_return_pct: number | null;
+  positive_months_pct?: number | null;
+  win_rate: number | null;
+  average_r: number | null;
+  profit_factor: number | null;
+  average_sessions: number | null;
+}
+
+export interface PortfolioBacktestResult {
+  metrics: PortfolioBacktestMetrics;
+  monthly_returns: { month: string; return_pct: number }[];
+  by_pattern: { key: string; trades: number; win_rate: number; average_r: number; pnl: number }[];
+  by_regime: { key: string; trades: number; win_rate: number; average_r: number; pnl: number }[];
+  equity_curve: { date: string; equity: number; benchmark: number }[];
+  trades: {
+    symbol: string; sector: string; pattern: string; regime: string; entry_date: string; exit_date: string;
+    entry: number; exit: number; qty: number; reason: string; pnl: number; return_pct: number; r: number; sessions: number;
+  }[];
+  assumptions: string[];
+  signal_samples: number;
+  symbols_tested: number;
+  symbols_skipped: number;
+  skipped_examples: string[];
+  universe: ScanUniverse;
+  years: number;
+  generated_at: string;
+}
+
+export interface BacktestRunState {
+  running: boolean;
+  universe?: string;
+  years?: number;
+  stage?: string;
+  progress?: number;
+  started_at?: string;
+  finished_at?: string;
+  error?: string | null;
 }

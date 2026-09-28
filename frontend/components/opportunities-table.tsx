@@ -70,6 +70,11 @@ export function OpportunitiesTable({ signals }: { signals: TradeSetup[] }) {
               <td>{signal.risk_reward_ratio.toFixed(2)}</td>
               <td>
                 {Math.round(signal.probability_score * 100)}%
+                {signal.historical_win_rate != null && (
+                  <div className="table-subtext" style={{ color: "var(--blue)", fontWeight: 600 }}>
+                    Hist. win {Math.round(signal.historical_win_rate * 100)}%
+                  </div>
+                )}
                 <div className="table-subtext">
                   Event {formatRiskLabel(signal.event_risk.risk_level)}
                 </div>

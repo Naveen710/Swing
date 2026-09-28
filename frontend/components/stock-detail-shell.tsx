@@ -114,6 +114,11 @@ export function StockDetailShell({ symbol }: { symbol: string }) {
             <div className="sd-sc-chips">
               <span className="sd-chip">R:R {s.risk_reward_ratio.toFixed(1)}×</span>
               <span className="sd-chip">{s.estimated_target_sessions} sessions</span>
+              {s.historical_win_rate != null && (
+                <span className="sd-chip" title={`Win rate of similarly scored setups across ${s.calibration_samples ?? 0} graded trades`}>
+                  Historically won {Math.round(s.historical_win_rate * 100)}%
+                </span>
+              )}
               <span className="sd-chip">{fmtDate(String(s.estimated_target_date))}</span>
             </div>
             <div className="sd-sc-actions">

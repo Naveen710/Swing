@@ -17,6 +17,7 @@ import {
   useTradingSettings,
   useWatchlist,
 } from "../lib/store";
+import { exportWorkbook, watchlistRows } from "../lib/excel";
 import { AppNav } from "./app-nav";
 
 type Status = "triggered" | "touched" | "waiting" | "invalidated" | "expired" | "unchecked";
@@ -156,6 +157,10 @@ export function WatchlistShell() {
         <div className="wl-actions">
           <button className="primary-button" onClick={() => void checkAll()} disabled={checking || !items.length}>
             {checking ? `Checking… ${Math.round(progress * 100)}%` : "Check triggers now"}
+          </button>
+          <button className="secondary-button" disabled={!items.length}
+            onClick={() => void exportWorkbook("swing-watchlist", [{ name: "Watchlist", rows: watchlistRows(items) }])}>
+            Export to Excel
           </button>
           {permission === "default" && <button className="secondary-button" onClick={() => void enableAlerts()}>Enable browser alerts</button>}
           {permission === "granted" && <span className="pill-tag pill-tag--ok">Browser alerts on</span>}

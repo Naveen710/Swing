@@ -19,6 +19,7 @@ import {
   useJournal,
   useTradingSettings,
 } from "../lib/store";
+import { exportWorkbook, journalSheets } from "../lib/excel";
 import { AppNav } from "./app-nav";
 
 const PATTERNS = [
@@ -139,6 +140,7 @@ export function JournalShell() {
               onChange={(e) => setSettings({ ...settings, capital: Number(e.target.value) })} />
           </label>
           <div className="jr-io">
+            <button className="mini-btn mini-btn--primary" onClick={() => void exportWorkbook("swing-journal", journalSheets(trades, settings.capital))} disabled={!trades.length}>Export to Excel</button>
             <button className="mini-btn" onClick={() => downloadText(`swing-journal-${todayISO()}.csv`, journalToCsv(trades), "text/csv")} disabled={!trades.length}>Export CSV</button>
             <button className="mini-btn" onClick={backup} disabled={!trades.length}>Backup</button>
             <button className="mini-btn" onClick={() => fileRef.current?.click()}>Restore</button>

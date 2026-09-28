@@ -17,6 +17,7 @@ import {
   useWatchlist,
   watchFromSetup,
 } from "../lib/store";
+import { exportWorkbook, regimeRows, setupRow } from "../lib/excel";
 import { ScanUniverse, TradeSetup } from "../types";
 import { GATE_LABEL, GateReason, QualityBadges, gateFailures } from "./quality-badges";
 import { RegimeBanner, useMarketRegime } from "./regime-banner";
@@ -53,6 +54,7 @@ export function TradingSystemPanel() {
   const [progress, setProgress] = useState({ scanned: 0, total: 0 });
   const [statusMsg, setStatusMsg] = useState("");
   const [toast, setToast] = useState<string | null>(null);
+  const [rejected, setRejected] = useState<{ count: number; examples: string[] }>({ count: 0, examples: [] });
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
@@ -94,6 +96,9 @@ export function TradingSystemPanel() {
     setRaw(results);
     setPhase("done");
     setStatusMsg(`Scan complete — ${results.length} candidate${results.length === 1 ? "" : "s"} returned before system filters.`);
+    getScanStatus()
+      .then((s) => setRejected({ count: s.data_rejected ?? 0, examples: s.data_rejected_examples ?? [] }))
+      .catch(() => undefined);
   }
 
   async function pollStatus() {
@@ -158,6 +163,42 @@ export function TradingSystemPanel() {
   const totalProfit = actionable.reduce((a, r) => a + qtyFor(r) * (r.target_price - r.entry_price), 0);
   const totalRisk = actionable.reduce((a, r) => a + qtyFor(r) * (r.entry_price - r.stop_loss), 0);
   const avgConf = actionable.length ? Math.round(actionable.reduce((a, r) => a + r.probability_score, 0) / actionable.length * 100) : 0;
+  async function exportExcel() {
+    const pickRows = picks.map((r, i) => {
+      const q = qtyFor(r);
+      return setupRow(r, {
+        Rank: i + 1,
+        Status: i < slotsLeft ? "Actionable" : "Backup",
+        "Qty": q,
+        "Deploy (₹)": Math.round(q * r.entry_price),
+        "Risk at stop (₹)": Math.round(q * (r.entry_price - r.stop_loss)),
+        "Profit at target (₹)": Math.round(q * (r.target_price - r.entry_price)),
+      });
+    });
+    const gatedRows = gated.map(({ setup, reasons }) =>
+      setupRow(setup, { "Blocked because": reasons.map((g) => GATE_LABEL[g]).join("; ") })
+    );
+    await exportWorkbook("system-picks", [
+      { name: "Trade picks", rows: pickRows },
+      { name: "Blocked by gates", rows: gatedRows },
+      { name: "Market regime", rows: regimeRows(regime) },
+      {
+        name: "Settings",
+        rows: [
+          { Setting: "Universe", Value: UNIVERSE_OPTIONS.find((o) => o.value === universe)?.label ?? universe },
+          { Setting: "Capital (₹)", Value: settings.capital },
+          { Setting: "Risk per trade %", Value: settings.riskPct },
+          { Setting: "Min confidence %", Value: Math.round(thresholds.prob * 100) },
+          { Setting: "Min R:R", Value: thresholds.rr },
+          { Setting: "Position size %", Value: Math.round(thresholds.size * 100) },
+          { Setting: "Regime-adjusted", Value: useRegime ? "Yes" : "No" },
+          { Setting: "Strict quality gates", Value: strictGates ? "Yes" : "No" },
+          { Setting: "Open positions", Value: openTrades.length },
+        ],
+      },
+    ]);
+  }
+
   const progressPct = progress.total > 0 ? Math.min(100, Math.round(progress.scanned / progress.total * 100)) : 0;
   const isRunning = phase === "scanning" || phase === "polling";
 
@@ -230,6 +271,12 @@ export function TradingSystemPanel() {
         </div>
       )}
       {statusMsg && <p className={phase === "error" ? "ts-error" : "ts-notice"}>{statusMsg}</p>}
+      {phase === "done" && rejected.count > 0 && (
+        <details className="ts-dq">
+          <summary>{rejected.count} stock{rejected.count === 1 ? "" : "s"} skipped for stale or suspect price data</summary>
+          <ul>{rejected.examples.map((e) => <li key={e}>{e}</li>)}</ul>
+        </details>
+      )}
 
       {phase === "done" && picks.length > 0 && (
         <div className="ts-summary">
@@ -265,6 +312,9 @@ export function TradingSystemPanel() {
         </button>
         <button className={`ts-tab ${activeTab === "rules" ? "ts-tab--on" : ""}`} onClick={() => setActiveTab("rules")}>Signal rules</button>
         <button className={`ts-tab ${activeTab === "risk" ? "ts-tab--on" : ""}`} onClick={() => setActiveTab("risk")}>Risk limits</button>
+        {phase === "done" && (picks.length > 0 || gated.length > 0) && (
+          <button className="mini-btn ts-export" onClick={() => void exportExcel()}>Export to Excel</button>
+        )}
       </div>
 
       {activeTab === "picks" && (
@@ -325,8 +375,16 @@ export function TradingSystemPanel() {
                             <div className="ts-pb"><div className="ts-pb-fill" style={{ width: Math.round(r.probability_score * 100) + "%" }} /></div>
                             <span>{Math.round(r.probability_score * 100)}%</span>
                           </div>
+                          {r.historical_win_rate != null && (
+                            <div className="table-subtext ts-hist" title="How often setups with a similar score actually won, from backtest and live results">
+                              Historically won {Math.round(r.historical_win_rate * 100)}%
+                            </div>
+                          )}
                           {r.backtest.total_trades > 0 && (
-                            <div className="table-subtext">Backtest {Math.round(r.backtest.win_rate * 100)}% ({r.backtest.total_trades})</div>
+                            <div className="table-subtext">
+                              This stock: {Math.round(r.backtest.win_rate * 100)}% win
+                              {r.backtest.average_r !== undefined ? ` · ${r.backtest.average_r >= 0 ? "+" : ""}${r.backtest.average_r.toFixed(2)}R` : ""} ({r.backtest.total_trades})
+                            </div>
                           )}
                         </td>
                         <td style={{ fontWeight: 600 }}>{q > 0 ? q : "—"}</td>
@@ -417,7 +475,7 @@ export function TradingSystemPanel() {
               { m: "NSE delivery % and up/down volume", s: "Real buyers, not intraday churn" },
             ]},
             { n: "4", title: "Price structure & R:R", badge: "Threshold", col: "green", rules: [
-              { m: "Defined trigger, stop below structure", s: "Entry and exit known before the trade" },
+              { m: "Defined trigger, stop below structure — max 8% below entry", s: "Setups needing a wider stop are skipped: their targets aren't reachable in a swing window" },
               { m: `Minimum ${thresholds.rr}× risk:reward (regime-adjusted)`, s: "Winners must pay for the losers" },
             ]},
             { n: "5", title: "Hard quality gates", badge: "Pass / fail", col: "amber", rules: [
@@ -508,10 +566,15 @@ export function TradingSystemPanel() {
         .ts-stat--g strong { color:var(--green); }
         .ts-stat-sub { display:block; font-size:0.76rem; color:var(--muted); margin-top:3px; }
         .ts-backup td { opacity:0.62; }
+        .ts-hist { color:var(--blue); font-weight:600; }
+        .ts-dq { font-size:0.84rem; color:var(--muted); margin:-6px 0 14px; }
+        .ts-dq summary { cursor:pointer; }
+        .ts-dq ul { margin:6px 0 0; padding-left:18px; }
         .ts-backup td:last-child { opacity:1; }
         .ts-tabs { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:18px; }
         .ts-tab { padding:8px 18px; border-radius:999px; border:1px solid var(--line); background:rgba(255,255,255,0.55); color:var(--muted); font-size:0.88rem; font-weight:500; cursor:pointer; }
         .ts-tab:hover { border-color:rgba(241,104,0,0.28); color:var(--text); }
+        .ts-export { margin-left:auto; align-self:center; }
         .ts-tab--on { background:linear-gradient(135deg,#f16800,#ff9a2f); color:#fff7ef; border-color:transparent; }
         .ts-fade { animation: ts-in 180ms ease; }
         @keyframes ts-in { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:translateY(0)} }

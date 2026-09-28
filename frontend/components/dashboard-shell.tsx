@@ -5,6 +5,7 @@ import { startTransition, useEffect, useMemo, useState } from "react";
 
 import { getLatestSignals, getScanStatus, getStocks, runScan } from "../lib/api";
 import { ScanUniverse, StockSummary, TradeSetup } from "../types";
+import { exportWorkbook, regimeRows, setupRow } from "../lib/excel";
 import { AppNav } from "./app-nav";
 import { OpportunitiesTable } from "./opportunities-table";
 import { RegimeBanner, useMarketRegime } from "./regime-banner";
@@ -424,6 +425,18 @@ export function DashboardShell() {
               versus NIFTY for {formatUniverseLabel(selectedUniverse)}.
             </p>
           </div>
+          <button
+            className="secondary-button"
+            disabled={!signals.length}
+            onClick={() =>
+              void exportWorkbook(`scan-${selectedUniverse}`, [
+                { name: "Opportunities", rows: signals.map((s, i) => setupRow(s, { Rank: i + 1 })) },
+                { name: "Market regime", rows: regimeRows(marketRegime.regime) },
+              ])
+            }
+          >
+            Export to Excel
+          </button>
         </div>
 
         {loading ? (

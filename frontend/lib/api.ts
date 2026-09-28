@@ -1,5 +1,8 @@
 import {
+  BacktestRunState,
   MarketRegimeSnapshot,
+  PerformanceSummary,
+  PortfolioBacktestResult,
   ScanUniverse,
   ScanResponse,
   ScanStatusResponse,
@@ -63,4 +66,28 @@ export function getStockDetail(symbol: string): Promise<StockDetailResponse> {
 
 export function getMarketRegime(refresh = false): Promise<MarketRegimeSnapshot> {
   return request<MarketRegimeSnapshot>(`/regime${refresh ? "?refresh=true" : ""}`);
+}
+
+export function getPerformance(): Promise<PerformanceSummary> {
+  return request<PerformanceSummary>("/performance");
+}
+
+export function evaluateLedger(): Promise<{ checked?: number; updated?: number; skipped?: string }> {
+  return request("/performance/evaluate", { method: "POST" });
+}
+
+export function startPortfolioBacktest(universe: ScanUniverse, years: number): Promise<{ started: boolean; state: BacktestRunState }> {
+  return request(`/backtest/portfolio?universe=${encodeURIComponent(universe)}&years=${years}`, { method: "POST" });
+}
+
+export function getPortfolioBacktestStatus(): Promise<BacktestRunState> {
+  return request<BacktestRunState>("/backtest/portfolio/status");
+}
+
+export async function getPortfolioBacktest(universe: ScanUniverse): Promise<PortfolioBacktestResult | null> {
+  try {
+    return await request<PortfolioBacktestResult>(`/backtest/portfolio?universe=${encodeURIComponent(universe)}`);
+  } catch {
+    return null; // 404 when no run exists yet
+  }
 }
