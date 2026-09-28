@@ -177,6 +177,10 @@ class BacktestStats(BaseModel):
     target_hit_rate: float
     average_holding_sessions: float
     average_target_sessions: float | None
+    signals: int = 0
+    fill_rate: float = 0.0
+    average_r: float = 0.0
+    cost_pct: float = 0.0
 
 
 class TradeSetup(BaseModel):
@@ -209,6 +213,9 @@ class TradeSetup(BaseModel):
     peer_rank: PeerRankSnapshot | None = None
     fundamentals: FundamentalSnapshot | None = None
     quality_flags: list[str] = Field(default_factory=list)
+    signal_date: date | None = None
+    historical_win_rate: float | None = None
+    calibration_samples: int | None = None
 
 
 class ScanRequest(BaseModel):
@@ -244,6 +251,8 @@ class ScanStatusResponse(BaseModel):
     universe_size: int
     scanned_symbols: int
     latest_results_count: int
+    data_rejected: int = 0
+    data_rejected_examples: list[str] = Field(default_factory=list)
 
 
 class StockDetailResponse(BaseModel):

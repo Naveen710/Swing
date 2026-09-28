@@ -50,6 +50,10 @@ from app.services.selection_overlays import (
     build_sector_strength_map,
 )
 from app.services.store import signal_store
+from app.services.trade_sim import TradePlan, plan_is_tradeable, plan_trade
+from app.services.data_quality import data_quality_issue
+from app.services.calibration import Calibrator
+from app.services.ledger import SignalLedger
 from app.services.universe import (
     StockListing,
     get_benchmark_candidates,
@@ -94,7 +98,12 @@ class ScanSink:
     scores: dict[str, tuple[str, float]] = field(default_factory=dict)
     above_ema50: int = 0
     total: int = 0
+    rejected: dict[str, str] = field(default_factory=dict)
     lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def reject(self, symbol: str, reason: str) -> None:
+        with self.lock:
+            self.rejected[symbol] = reason
 
     def record(self, symbol: str, sector: str, rs_score: float, above_ema50: bool) -> None:
         with self.lock:
@@ -123,6 +132,9 @@ class ScannerService:
         self.event_risk = YahooEventRiskProvider()
         self.fundamentals = YahooFundamentalsProvider()
         self.regime = MarketRegimeService(self.market_data)
+        self.last_rejected: dict[str, str] = {}
+        self.ledger = SignalLedger(self.market_data)
+        self.calibration = Calibrator()
         self._active_scan: ActiveScanState | None = None
         self._active_scan_lock = threading.Lock()
 
@@ -218,6 +230,7 @@ class ScannerService:
             sink,
         )
         self.regime.record_scan_breadth(sink.above_ema50, sink.total)
+        self.last_rejected = dict(sink.rejected)
         candidates = self._apply_candidate_overlays(candidates, request, sink)
         candidates.sort(
             key=lambda candidate: (
@@ -238,6 +251,7 @@ class ScannerService:
             universe_size=len(listings),
             scanned_symbols=len(listings),
         )
+        self._record_to_ledger(limited, request.universe)
 
         return ScanResponse(
             universe=request.universe,
@@ -272,6 +286,10 @@ class ScannerService:
             "universe_size": universe_size,
             "scanned_symbols": scanned_symbols,
             "latest_results_count": latest_results_count,
+            "data_rejected": len(self.last_rejected),
+            "data_rejected_examples": [
+                f"{symbol}: {reason}" for symbol, reason in list(self.last_rejected.items())[:8]
+            ],
         }
 
     def get_stock_detail(self, symbol: str) -> StockDetailResponse | None:
@@ -335,6 +353,12 @@ class ScannerService:
                 listing=listing,
                 lookback_days=request.lookback_days,
             )
+            issue = data_quality_issue(history, self._market_reference_date(benchmark_context))
+            if issue is not None:
+                if sink is not None:
+                    sink.reject(listing.symbol, issue)
+                logger.info("Skipping %s: %s", listing.symbol, issue)
+                return None
             enriched = apply_indicators(history)
             relative_strength = build_relative_strength_snapshot(enriched, benchmark_context)
             if sink is not None and len(enriched) >= 60:
@@ -357,6 +381,10 @@ class ScannerService:
                 relative_strength=relative_strength,
                 delivery_trends=delivery_trends,
             )
+            if not plan_is_tradeable(
+                TradePlan(candidate.entry_price, candidate.stop_loss, candidate.target_price)
+            ):
+                return None
             if (
                 request.universe == ScanUniverse.MID_SMALL_2000_PLUS
                 and not candidate.liquidity.passes_filter
@@ -395,12 +423,9 @@ class ScannerService:
             delivery_trend=delivery_trends.get(listing.symbol.upper()),
         )
         current_price = float(latest["Close"])
-        entry = round(max(current_price, match.trigger_price), 2)
         atr = float(latest["atr14"])
-        technical_stop = min(match.support_price * 0.995, entry - atr * 0.8)
-        risk = max(entry - technical_stop, atr * 1.1, entry * 0.022)
-        stop_loss = round(entry - risk, 2)
-        target_price = round(entry + risk * match.reward_multiple, 2)
+        plan = plan_trade(latest, match.trigger_price, match.support_price, match.reward_multiple)
+        entry, stop_loss, target_price = plan.entry, plan.stop, plan.target
         risk_reward = round((target_price - entry) / (entry - stop_loss), 2)
         probability = self._score_probability(latest, match)
         trigger_gap = max(0.0, (entry / current_price) - 1)
@@ -559,6 +584,7 @@ class ScannerService:
         )
 
         quality_flags = self._build_quality_flags(candidate, estimated_target_sessions)
+        historical_win_rate, calibration_samples = self.calibration.predict(candidate.ranking_score)
         reason += self._build_overlay_note(candidate)
 
         return TradeSetup(
@@ -591,6 +617,9 @@ class ScannerService:
             peer_rank=candidate.peer_rank,
             fundamentals=candidate.fundamentals,
             quality_flags=quality_flags,
+            signal_date=candidate.reference_date,
+            historical_win_rate=historical_win_rate,
+            calibration_samples=calibration_samples,
         )
 
     def _score_probability(self, latest, match: PatternMatch) -> float:
@@ -657,6 +686,24 @@ class ScannerService:
             for candidate in enriched
             if candidate.probability_score >= request.min_probability
         ]
+
+    def _record_to_ledger(self, setups: list[TradeSetup], universe: ScanUniverse) -> None:
+        """Every published pick goes into the ledger so its real outcome can be graded later."""
+        try:
+            regime = self.regime.get_snapshot().regime
+        except Exception:  # noqa: BLE001
+            regime = None
+        try:
+            self.ledger.record(setups, universe.value, regime)
+            self.ledger.evaluate_in_background()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not write signals to the ledger. %s", exc)
+
+    def _market_reference_date(self, benchmark_context: RelativeStrengthContext | None) -> date:
+        """Latest session date: the benchmark's last bar, or today if the benchmark is unavailable."""
+        if benchmark_context is not None and not benchmark_context.benchmark_frame.empty:
+            return benchmark_context.benchmark_frame.index[-1].date()
+        return datetime.now(UTC).date()
 
     def _external_overlays_enabled(self) -> bool:
         return settings.enable_external_overlays and settings.market_data_provider != "demo"
@@ -1220,6 +1267,7 @@ class ScannerService:
 
     def _finish_incremental_scan(self, state: ActiveScanState) -> None:
         self.regime.record_scan_breadth(state.sink.above_ema50, state.sink.total)
+        self.last_rejected = dict(state.sink.rejected)
         state.candidates = self._apply_candidate_overlays(
             state.candidates, state.request, state.sink
         )
@@ -1246,6 +1294,7 @@ class ScannerService:
             universe_size=len(state.listings),
             scanned_symbols=len(state.listings),
         )
+        self._record_to_ledger(limited, state.request.universe)
 
     def _build_accumulation_note(
         self,

@@ -4,9 +4,12 @@ from fastapi import APIRouter, HTTPException
 
 from app.config import settings
 from app.schemas import MarketRegimeSnapshot, ScanRequest, ScanStatusResponse, ScanUniverse
+from app.services.db import is_persistent
+from app.services.portfolio_backtest import PortfolioBacktestRunner, latest_result
 from app.services.scanner import scanner_service
 
 router = APIRouter()
+backtest_runner = PortfolioBacktestRunner(scanner_service)
 
 
 @router.get("/health")
@@ -46,6 +49,48 @@ def get_scan_status() -> ScanStatusResponse:
 def get_market_regime(refresh: bool = False) -> MarketRegimeSnapshot:
     """Market regime: trend, breadth and volatility context plus recommended thresholds."""
     return scanner_service.market_regime(force=refresh)
+
+
+@router.get("/performance")
+def get_performance():
+    """Live signal ledger: how published picks actually played out."""
+    summary = scanner_service.ledger.summary()
+    summary["persistent_storage"] = is_persistent()
+    summary["calibration"] = scanner_service.calibration.info()
+    return summary
+
+
+@router.post("/performance/evaluate")
+def evaluate_ledger():
+    return scanner_service.ledger.evaluate()
+
+
+@router.post("/backtest/portfolio")
+def start_portfolio_backtest(
+    universe: ScanUniverse = ScanUniverse.NIFTY500,
+    years: int = 2,
+    max_symbols: int | None = None,
+):
+    # Full-universe runs are CPU-heavy; from the web we test an evenly spread sample.
+    # Run `python -m app.jobs.run_portfolio_backtest` locally for the full universe.
+    cap = settings.web_backtest_max_symbols
+    max_symbols = min(max_symbols or cap, cap)
+    years = max(1, min(years, 3))
+    started = backtest_runner.start(universe, years, max_symbols)
+    return {"started": started, "state": backtest_runner.state}
+
+
+@router.get("/backtest/portfolio/status")
+def portfolio_backtest_status():
+    return backtest_runner.state
+
+
+@router.get("/backtest/portfolio")
+def get_portfolio_backtest(universe: ScanUniverse = ScanUniverse.NIFTY500):
+    result = latest_result(universe)
+    if result is None:
+        raise HTTPException(status_code=404, detail="No portfolio backtest has been run for this universe yet.")
+    return result
 
 
 @router.get("/stock/{symbol}")
