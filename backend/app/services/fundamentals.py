@@ -34,6 +34,7 @@ class YahooFundamentalsProvider:
     def __init__(self) -> None:
         self.ttl = settings.fundamentals_cache_ttl_minutes * 60
         self._cache: dict[str, _Cached] = {}
+        self._info_cache: dict[str, tuple[dict, float]] = {}
         self._lock = threading.Lock()
 
     def get_snapshot(self, symbol: str) -> FundamentalSnapshot:
@@ -49,14 +50,29 @@ class YahooFundamentalsProvider:
             self._cache[key] = _Cached(snapshot=snapshot, cached_at=now)
         return snapshot
 
-    def _fetch(self, symbol: str) -> FundamentalSnapshot:
+    def get_info(self, symbol: str) -> dict:
+        """Full Yahoo profile (valuation, growth, margins, ownership...), cached like the snapshot."""
+        key = symbol.upper()
+        now = time.time()
+        with self._lock:
+            cached = self._info_cache.get(key)
+            if cached and now - cached[1] <= self.ttl:
+                return cached[0]
         try:
             yf = importlib.import_module("yfinance")
             info = yf.Ticker(symbol).info or {}
         except Exception as exc:
             logger.warning("Unable to load fundamentals for %s. %s", symbol, exc)
-            return unknown_fundamentals()
-        if not isinstance(info, dict) or not info:
+            info = {}
+        if not isinstance(info, dict):
+            info = {}
+        with self._lock:
+            self._info_cache[key] = (info, now)
+        return info
+
+    def _fetch(self, symbol: str) -> FundamentalSnapshot:
+        info = self.get_info(symbol)
+        if not info:
             return unknown_fundamentals()
         return build_fundamental_snapshot(info)
 

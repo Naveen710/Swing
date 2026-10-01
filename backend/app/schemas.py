@@ -339,3 +339,79 @@ class StockDetailResponse(BaseModel):
     stock: StockSummary
     latest_signal: TradeSetup | None
     candles: list[Candle]
+
+
+class StockSearchResult(BaseModel):
+    symbol: str
+    company_name: str
+    sector: str
+    market_cap_bucket: MarketCapBucket
+
+
+class AnalysisFactor(BaseModel):
+    name: str
+    value: str
+    status: str  # good | neutral | bad | na
+    note: str = ""
+
+
+class AnalysisCategory(BaseModel):
+    name: str
+    weight: float
+    score: float | None
+    factors: list[AnalysisFactor] = Field(default_factory=list)
+
+
+class AnalysisSection(BaseModel):
+    available: bool
+    score: float | None
+    grade: str | None
+    label: str | None
+    categories: list[AnalysisCategory] = Field(default_factory=list)
+    note: str | None = None
+
+
+class AnalysisSetup(BaseModel):
+    pattern: PatternType
+    explanation: str
+    entry: float
+    stop: float
+    target: float
+    risk_reward: float
+    tradeable: bool
+
+
+class AnalysisLevels(BaseModel):
+    support_20d: float
+    resistance_20d: float
+    support_60d: float
+    resistance_60d: float
+    high_52w: float
+    low_52w: float
+    atr_pct: float
+
+
+class StockAnalysisResponse(BaseModel):
+    symbol: str
+    company_name: str
+    sector: str
+    industry: str | None = None
+    description: str | None = None
+    in_scan_universe: bool
+    price: float
+    change_pct: float
+    as_of: date
+    market_cap_cr: float | None = None
+    overall_score: float
+    overall_grade: str
+    overall_label: str
+    summary: str
+    technical: AnalysisSection
+    fundamental: AnalysisSection
+    strengths: list[str] = Field(default_factory=list)
+    concerns: list[str] = Field(default_factory=list)
+    setup: AnalysisSetup | None = None
+    levels: AnalysisLevels
+    regime: str | None = None
+    candles: list[Candle] = Field(default_factory=list)
+    data_notes: list[str] = Field(default_factory=list)

@@ -11,8 +11,11 @@ from app.schemas import (
     ScanStatusResponse,
     ScanUniverse,
     SectorRotationResponse,
+    StockAnalysisResponse,
+    StockSearchResult,
 )
 from app.services.portfolio_risk import compute_portfolio_risk
+from app.services.stock_analysis import analyze_stock, search_stocks
 from app.services.db import is_persistent
 from app.services.portfolio_backtest import PortfolioBacktestRunner, latest_result
 from app.services.scanner import scanner_service
@@ -114,6 +117,21 @@ def get_portfolio_backtest(universe: ScanUniverse = ScanUniverse.NIFTY500):
     result = latest_result(universe)
     if result is None:
         raise HTTPException(status_code=404, detail="No portfolio backtest has been run for this universe yet.")
+    return result
+
+
+@router.get("/search")
+def search(q: str, limit: int = 10) -> list[StockSearchResult]:
+    """Find stocks by symbol or company name across all scan universes."""
+    return search_stocks(q, max(1, min(limit, 25)))
+
+
+@router.get("/analyze/{symbol}")
+def analyze(symbol: str) -> StockAnalysisResponse:
+    """Technical + fundamental analysis with an overall A–E rating."""
+    result = analyze_stock(scanner_service, symbol)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"No price data found for {symbol.upper()}. Check the NSE symbol.")
     return result
 
 
