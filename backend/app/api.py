@@ -15,6 +15,7 @@ from app.schemas import (
     StockSearchResult,
 )
 from app.services.portfolio_risk import compute_portfolio_risk
+from app.services.quant_screen import QuantScreenService
 from app.services.stock_analysis import analyze_stock, search_stocks
 from app.services.db import is_persistent
 from app.services.portfolio_backtest import PortfolioBacktestRunner, latest_result
@@ -118,6 +119,15 @@ def get_portfolio_backtest(universe: ScanUniverse = ScanUniverse.NIFTY500):
     if result is None:
         raise HTTPException(status_code=404, detail="No portfolio backtest has been run for this universe yet.")
     return result
+
+
+quant_service = QuantScreenService(scanner_service)
+
+
+@router.get("/quant")
+def quant_screen(universe: ScanUniverse = ScanUniverse.NIFTY500, top: int = 20, refresh: bool = False):
+    """Multi-factor quant ranking of the whole universe, with its own historical validation."""
+    return quant_service.run(universe, max(5, min(top, 50)), refresh=refresh)
 
 
 @router.get("/search")
