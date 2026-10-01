@@ -22,6 +22,18 @@ export function QualityBadges({ setup }: { setup: TradeSetup }) {
     });
   }
 
+  const rot = setup.sector_rotation;
+  if (rot?.leading) badges.push({ label: `Top sector #${rot.rank}`, tone: "ok" });
+  else if (rot?.lagging) badges.push({ label: `Lagging sector #${rot.rank}/${rot.sector_count}`, tone: "bad" });
+
+  if (setup.rs_line?.leads_price) badges.push({ label: "RS line leads price", tone: "ok" });
+  if (setup.pattern === "gap_momentum") badges.push({ label: "Results/news gap", tone: "info" });
+
+  const sm = setup.smart_money;
+  if (sm?.delivery_spike) badges.push({ label: `Delivery ${sm.delivery_ratio?.toFixed(1)}× avg`, tone: "ok" });
+  if (sm && sm.bulk_deal_buys > 0 && sm.bulk_deal_net_qty > 0) badges.push({ label: "Bulk buying", tone: "ok" });
+  else if (sm && sm.bulk_deal_sells > 0 && sm.bulk_deal_net_qty < 0) badges.push({ label: "Bulk selling", tone: "bad" });
+
   const ev = setup.event_risk;
   if (ev.blackout) badges.push({ label: ev.days_to_earnings !== null && ev.days_to_earnings >= 0 ? `Results in ${ev.days_to_earnings}d` : "Post-results", tone: "bad" });
   else if (ev.days_to_ex_dividend !== null && ev.days_to_ex_dividend !== undefined) badges.push({ label: `Ex-div in ${ev.days_to_ex_dividend}d`, tone: "info" });

@@ -9,6 +9,7 @@ import { exportWorkbook, regimeRows, setupRow } from "../lib/excel";
 import { AppNav } from "./app-nav";
 import { OpportunitiesTable } from "./opportunities-table";
 import { RegimeBanner, useMarketRegime } from "./regime-banner";
+import { SectorRotationPanel } from "./sector-rotation-panel";
 import { TradingSystemPanel } from "./trading-system-panel";
 
 const DEFAULT_INVESTMENT = 100000;
@@ -264,6 +265,8 @@ export function DashboardShell() {
         error={marketRegime.error}
         onRefresh={() => void marketRegime.reload(true)}
       />
+
+      <SectorRotationPanel universe={selectedUniverse} refreshKey={signals} />
 
       <section className="stats-grid">
         <article className="stat-card">

@@ -40,6 +40,13 @@ export interface JournalTrade {
   exit_price?: number;
   exit_reason?: ExitReason;
   notes?: string;
+  /** Original stop before any trailing — R is always measured against this. */
+  initial_stop?: number;
+  /** Partial exits booked before the final close. */
+  partials?: { qty: number; price: number; date: string }[];
+  /** Whether the final exit followed an exit-engine rule or was discretionary. */
+  exit_discipline?: "rule" | "instinct";
+  exit_rule?: string | null;
 }
 
 export interface WatchItem {
@@ -206,11 +213,17 @@ export interface ClosedMetrics {
   win: boolean;
 }
 
+export function initialQty(t: JournalTrade) {
+  return t.qty + (t.partials ?? []).reduce((a, p) => a + p.qty, 0);
+}
+
 export function closedMetrics(t: JournalTrade): ClosedMetrics {
   const exit = t.exit_price ?? t.entry_price;
-  const pnl = (exit - t.entry_price) * t.qty;
-  const riskPerShare = t.entry_price - t.stop_loss;
-  const r = riskPerShare > 0 ? (exit - t.entry_price) / riskPerShare : null;
+  const partialPnl = (t.partials ?? []).reduce((a, p) => a + (p.price - t.entry_price) * p.qty, 0);
+  const pnl = partialPnl + (exit - t.entry_price) * t.qty;
+  const riskPerShare = t.entry_price - (t.initial_stop ?? t.stop_loss);
+  const totalRisk = riskPerShare * initialQty(t);
+  const r = totalRisk > 0 ? pnl / totalRisk : null;
   const start = new Date(t.entry_date).getTime();
   const end = new Date(t.exit_date ?? todayISO()).getTime();
   const holdingDays = Math.max(0, Math.round((end - start) / 86400000));
@@ -278,6 +291,10 @@ export function journalSummary(trades: JournalTrade[], capital: number) {
     openDeployed,
     sectorCounts: [...sectorCounts.entries()].sort((a, b) => b[1] - a[1]),
     byPattern: groupStats(closed, (t) => t.pattern),
+    byDiscipline: groupStats(
+      closed.filter((t) => t.exit_discipline),
+      (t) => (t.exit_discipline === "rule" ? "Followed an exit rule" : "Discretionary exit"),
+    ),
     bySector: groupStats(closed, (t) => t.sector),
     monthly: [...monthly.entries()].sort((a, b) => b[0].localeCompare(a[0])),
   };

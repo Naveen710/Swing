@@ -70,6 +70,11 @@ export function setupRow(s: TradeSetup, extra: Row = {}): Row {
       ? `${s.fundamentals.quality_score}/${s.fundamentals.checks_available}` : null,
     "Next results": s.event_risk.earnings_date,
     "Ex-dividend": s.event_risk.ex_dividend_date ?? null,
+    "Sector rotation rank": s.sector_rotation ? `${s.sector_rotation.rank}/${s.sector_rotation.sector_count}` : null,
+    "RS line leads price": s.rs_line ? (s.rs_line.leads_price ? "Yes" : "No") : null,
+    "Delivery spike": s.smart_money ? (s.smart_money.delivery_spike ? "Yes" : "No") : null,
+    "Bulk deals (buys/sells)": s.smart_money && s.smart_money.bulk_deal_source !== "unavailable"
+      ? `${s.smart_money.bulk_deal_buys}/${s.smart_money.bulk_deal_sells}` : null,
     "Warnings": (s.quality_flags ?? []).join("; ") || null,
     ...extra,
   };
@@ -125,6 +130,9 @@ export function journalSheets(trades: JournalTrade[], capital: number): Sheet[] 
       "Days held": m.holdingDays,
       "Slippage %": round(m.slippagePct),
       "Exit reason": t.exit_reason ?? null,
+      "Exit discipline": t.exit_discipline ?? null,
+      "Exit rule": t.exit_rule ?? null,
+      "Partial exits": (t.partials ?? []).map((p) => `${p.qty}@${p.price}`).join(", ") || null,
       "Backtest win % at entry": t.backtest_win_rate === null ? null : round(t.backtest_win_rate * 100, 1),
     };
   });
@@ -155,6 +163,7 @@ export function journalSheets(trades: JournalTrade[], capital: number): Sheet[] 
     { name: "Open positions", rows: open },
     { name: "Closed trades", rows: closed },
     { name: "By pattern", rows: groupRows(summary.byPattern, "Pattern") },
+    { name: "Exit discipline", rows: groupRows(summary.byDiscipline, "Exit type") },
     { name: "By sector", rows: groupRows(summary.bySector, "Sector") },
     {
       name: "By month",

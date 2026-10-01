@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { getLatestSignals, getScanStatus, runScan } from "../lib/api";
+import { getLatestSignals, getPortfolioRisk, getScanStatus, runScan } from "../lib/api";
 import {
   MAX_OPEN_POSITIONS,
   MAX_PER_SECTOR,
@@ -18,7 +18,7 @@ import {
   watchFromSetup,
 } from "../lib/store";
 import { exportWorkbook, regimeRows, setupRow } from "../lib/excel";
-import { ScanUniverse, TradeSetup } from "../types";
+import { PortfolioRiskResponse, ScanUniverse, SymbolRisk, TradeSetup } from "../types";
 import { GATE_LABEL, GateReason, QualityBadges, gateFailures } from "./quality-badges";
 import { RegimeBanner, useMarketRegime } from "./regime-banner";
 
@@ -56,6 +56,7 @@ export function TradingSystemPanel() {
   const [toast, setToast] = useState<string | null>(null);
   const [rejected, setRejected] = useState<{ count: number; examples: string[] }>({ count: 0, examples: [] });
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [risk, setRisk] = useState<PortfolioRiskResponse | null>(null);
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
   useEffect(() => {
@@ -93,6 +94,7 @@ export function TradingSystemPanel() {
   }
 
   function finish(results: TradeSetup[]) {
+    window.dispatchEvent(new CustomEvent("swing-scan-complete", { detail: universe }));
     setRaw(results);
     setPhase("done");
     setStatusMsg(`Scan complete — ${results.length} candidate${results.length === 1 ? "" : "s"} returned before system filters.`);
@@ -143,6 +145,22 @@ export function TradingSystemPanel() {
       setStatusMsg(e instanceof Error ? e.message : "Could not reach the backend.");
     }
   }
+
+  // Beta of each pick and its correlation with what you already hold.
+  const pickKey = picks.map((p) => p.symbol).join(",");
+  useEffect(() => {
+    if (phase !== "done" || !picks.length) { setRisk(null); return; }
+    let alive = true;
+    getPortfolioRisk({
+      holdings: openTrades.map((t) => ({ symbol: t.symbol, value: t.entry_price * t.qty })),
+      candidates: picks.map((p) => p.symbol),
+      capital: settings.capital,
+    }).then((r) => alive && setRisk(r)).catch(() => alive && setRisk(null));
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, pickKey, openTrades.length]);
+  const riskFor = (symbol: string): SymbolRisk | undefined =>
+    risk?.candidates.find((c) => c.symbol === symbol) ?? risk?.holdings.find((c) => c.symbol === symbol);
 
   const qtyFor = (s: TradeSetup) => positionQty(s.entry_price, s.stop_loss, settings, thresholds.size);
 
@@ -254,6 +272,12 @@ export function TradingSystemPanel() {
           <input type="checkbox" checked={strictGates} onChange={(e) => setStrictGates(e.target.checked)} />
           Strict quality gates
         </label>
+        {risk && risk.portfolio_beta !== null && (
+          <span className="ts-portfolio">
+            Portfolio beta {risk.portfolio_beta.toFixed(2)}
+            {risk.high_correlation_pairs.length > 0 && <span className="q-bad"> · {risk.high_correlation_pairs.length} highly correlated pair{risk.high_correlation_pairs.length > 1 ? "s" : ""}</span>}
+          </span>
+        )}
         <span className="ts-portfolio">
           Open positions {openTrades.length}/{MAX_OPEN_POSITIONS}
           {slotsLeft === 0 ? " — portfolio full, close a trade before adding" : ` — room for ${slotsLeft} more`}
@@ -359,6 +383,18 @@ export function TradingSystemPanel() {
                           {backup && <div className="table-subtext">Backup — use if an earlier pick doesn&apos;t trigger</div>}
                           <div className="table-subtext">{r.company_name} · {r.sector}</div>
                           <QualityBadges setup={r} />
+                          {(() => {
+                            const rk = riskFor(r.symbol);
+                            if (!rk) return null;
+                            return (
+                              <div className="table-subtext">
+                                {rk.beta !== null && <>Beta {rk.beta.toFixed(2)}</>}
+                                {rk.high_correlation && rk.most_correlated_with && (
+                                  <span className="q-bad"> · ⚠ moves with {rk.most_correlated_with.replace(".NS", "")} (corr {rk.max_correlation?.toFixed(2)})</span>
+                                )}
+                              </div>
+                            );
+                          })()}
                           {!strictGates && gateFailures(r, heldSymbols, sectorCounts, MAX_PER_SECTOR).length > 0 && (
                             <div className="table-subtext q-bad">
                               ⚠ {gateFailures(r, heldSymbols, sectorCounts, MAX_PER_SECTOR).map((g) => GATE_LABEL[g]).join(", ")}

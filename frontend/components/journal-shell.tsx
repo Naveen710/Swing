@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   ExitReason,
@@ -19,7 +19,10 @@ import {
   useJournal,
   useTradingSettings,
 } from "../lib/store";
+import { getPortfolioRisk, getStockDetail } from "../lib/api";
 import { exportWorkbook, journalSheets } from "../lib/excel";
+import { ExitAdvice, computeExitAdvice } from "../lib/exits";
+import { PortfolioRiskResponse } from "../types";
 import { AppNav } from "./app-nav";
 
 const PATTERNS = [
@@ -28,6 +31,7 @@ const PATTERNS = [
   "relative_strength_breakout",
   "support_bounce",
   "volatility_contraction",
+  "gap_momentum",
   "manual",
 ];
 
@@ -40,6 +44,9 @@ export function JournalShell() {
   const [closing, setClosing] = useState<Record<string, CloseDraft>>({});
   const [editing, setEditing] = useState<Record<string, EditDraft>>({});
   const [showAdd, setShowAdd] = useState(false);
+  const [advice, setAdvice] = useState<Record<string, ExitAdvice | null>>({});
+  const [adviceLoading, setAdviceLoading] = useState(false);
+  const [risk, setRisk] = useState<PortfolioRiskResponse | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -53,14 +60,76 @@ export function JournalShell() {
     setTrades((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
   }
 
+  const openKey = trades.filter((t) => t.status === "open").map((t) => `${t.id}:${t.qty}:${t.stop_loss}`).join("|");
+
+  async function refreshAdvice() {
+    const openTrades = trades.filter((t) => t.status === "open");
+    if (!openTrades.length) { setAdvice({}); setRisk(null); return; }
+    setAdviceLoading(true);
+    const next: Record<string, ExitAdvice | null> = {};
+    const queue = [...openTrades];
+    const worker = async () => {
+      while (queue.length) {
+        const t = queue.shift()!;
+        try {
+          const detail = await getStockDetail(t.symbol);
+          next[t.id] = computeExitAdvice(t, detail.candles);
+        } catch {
+          next[t.id] = null;
+        }
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+    setAdvice(next);
+    setAdviceLoading(false);
+    getPortfolioRisk({
+      holdings: openTrades.map((t) => ({ symbol: t.symbol, value: t.entry_price * t.qty })),
+      capital: settings.capital,
+    }).then(setRisk).catch(() => setRisk(null));
+  }
+
+  useEffect(() => {
+    if (ready) void refreshAdvice();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, openKey]);
+
+  function bookPartial(t: JournalTrade, a: ExitAdvice) {
+    const qty = a.partialQty ?? Math.floor(t.qty / 2);
+    const input = window.prompt(`Sell ${qty} shares of ${t.symbol} at what price?`, String(a.partialPrice ?? a.lastClose));
+    const price = Number(input);
+    if (!input || !(price > 0) || qty <= 0 || qty >= t.qty) return;
+    update(t.id, {
+      qty: t.qty - qty,
+      initial_stop: t.initial_stop ?? t.stop_loss,
+      partials: [...(t.partials ?? []), { qty, price, date: todayISO() }],
+    });
+    setMessage(`Booked ${qty} ${t.symbol} at ₹${price}. ${t.qty - qty} shares still open.`);
+  }
+
+  function applyTrail(t: JournalTrade, a: ExitAdvice) {
+    if (a.suggestedStop === null) return;
+    update(t.id, { stop_loss: a.suggestedStop, initial_stop: t.initial_stop ?? t.stop_loss });
+    setMessage(`${t.symbol} stop raised to ₹${a.suggestedStop}.`);
+  }
+
   function startClose(t: JournalTrade) {
-    setClosing({ ...closing, [t.id]: { price: String(t.target_price), date: todayISO(), reason: "target" } });
+    const a = advice[t.id];
+    const reason: ExitReason =
+      a?.rule === "stop" ? "stop" : a?.rule === "time_stop" ? "time" : a?.rule === "target" ? "target" : "manual";
+    const price = a?.rule === "target" ? t.target_price : a ? a.lastClose : t.target_price;
+    setClosing({ ...closing, [t.id]: { price: String(price), date: todayISO(), reason } });
   }
   function confirmClose(t: JournalTrade) {
     const d = closing[t.id];
     const price = Number(d.price);
     if (!price || price <= 0) { setMessage("Enter a valid exit price."); return; }
-    update(t.id, { status: "closed", exit_price: price, exit_date: d.date, exit_reason: d.reason });
+    const a = advice[t.id];
+    update(t.id, {
+      status: "closed", exit_price: price, exit_date: d.date, exit_reason: d.reason,
+      initial_stop: t.initial_stop ?? t.stop_loss,
+      exit_discipline: a?.action === "exit" ? "rule" : "instinct",
+      exit_rule: a?.action === "exit" ? a.rule : null,
+    });
     const rest = { ...closing }; delete rest[t.id]; setClosing(rest);
     setMessage(`${t.symbol} closed.`);
   }
@@ -197,7 +266,7 @@ export function JournalShell() {
           <div className="table-shell">
             <table className="jr-tbl">
               <thead>
-                <tr><th>Stock</th><th>Entered</th><th>Entry</th><th>Qty</th><th>Stop</th><th>Target</th><th>Risk</th><th></th></tr>
+                <tr><th>Stock</th><th>Entered</th><th>Entry</th><th>Qty</th><th>Stop</th><th>Target</th><th>Risk</th><th>Exit plan</th><th></th></tr>
               </thead>
               <tbody>
                 {open.map((t) => {
@@ -220,6 +289,25 @@ export function JournalShell() {
                       <td className="q-bad">{e ? <input className="num-input" type="number" value={e.stop} onChange={(x) => setEditing({ ...editing, [t.id]: { ...e, stop: x.target.value } })} /> : fmtINR(t.stop_loss)}</td>
                       <td className="q-ok">{e ? <input className="num-input" type="number" value={e.target} onChange={(x) => setEditing({ ...editing, [t.id]: { ...e, target: x.target.value } })} /> : fmtINR(t.target_price)}</td>
                       <td>{fmtINR(risk)}<div className="table-subtext">{settings.capital ? ((risk / settings.capital) * 100).toFixed(2) : "0"}%</div></td>
+                      <td className="jr-exit">
+                        {(() => {
+                          const a = advice[t.id];
+                          if (a === undefined) return <span className="table-subtext">{adviceLoading ? "Checking…" : "—"}</span>;
+                          if (a === null) return <span className="table-subtext">No price data</span>;
+                          const tone = a.action === "exit" ? "pill-tag--bad" : a.action === "book_partial" || a.action === "trail" ? "pill-tag--warn" : "pill-tag--muted";
+                          const label = { exit: "Exit", book_partial: "Book half", trail: "Trail stop", hold: "Hold" }[a.action];
+                          return (
+                            <>
+                              <span className={`pill-tag ${tone}`}>{label}</span>
+                              <div className="jr-exit-msg">{a.message}</div>
+                              <div className="table-subtext">Last ₹{a.lastClose.toFixed(2)}{a.ema20 !== null && ` · 20 EMA ₹${a.ema20.toFixed(2)}`} · day {a.sessionsHeld}</div>
+                              {(t.partials ?? []).length > 0 && <div className="table-subtext">Booked {(t.partials ?? []).map((p) => `${p.qty}@₹${p.price}`).join(", ")}</div>}
+                              {a.action === "book_partial" && <button className="mini-btn mini-btn--primary" onClick={() => bookPartial(t, a)}>Book half</button>}
+                              {a.action === "trail" && <button className="mini-btn mini-btn--primary" onClick={() => applyTrail(t, a)}>Raise stop to ₹{a.suggestedStop}</button>}
+                            </>
+                          );
+                        })()}
+                      </td>
                       <td>
                         {c ? (
                           <div className="jr-close">
@@ -258,6 +346,78 @@ export function JournalShell() {
           </div>
         )}
       </section>
+
+      <div className="jr-2col">
+        <section className="panel jr-panel">
+          <div className="jr-panel-head">
+            <h2>Portfolio risk</h2>
+            <button className="mini-btn" onClick={() => void refreshAdvice()} disabled={adviceLoading}>{adviceLoading ? "Updating…" : "Refresh"}</button>
+          </div>
+          {!risk || risk.holdings.length === 0 ? (
+            <p className="muted">Beta and correlation appear here once you have open positions.</p>
+          ) : (
+            <>
+              <div className="jr-risk-top">
+                <div><span className="jr-stat-l">Portfolio beta</span><strong className={risk.portfolio_beta !== null && risk.portfolio_beta > 1.3 ? "q-bad" : ""}>{risk.portfolio_beta?.toFixed(2) ?? "—"}</strong></div>
+                <div><span className="jr-stat-l">Beta on total capital</span><strong>{risk.capital_weighted_beta?.toFixed(2) ?? "—"}</strong></div>
+                <div><span className="jr-stat-l">Avg correlation</span><strong className={risk.average_pairwise_correlation !== null && risk.average_pairwise_correlation >= 0.6 ? "q-bad" : ""}>{risk.average_pairwise_correlation?.toFixed(2) ?? "—"}</strong></div>
+              </div>
+              <p className="muted jr-risk-note">
+                {risk.portfolio_beta !== null
+                  ? `If ${risk.benchmark_name} falls 3%, these positions would typically fall about ${(risk.portfolio_beta * 3).toFixed(1)}%.`
+                  : ""}
+                {risk.high_correlation_pairs.length > 0
+                  ? ` ⚠ ${risk.high_correlation_pairs.map((p) => `${p.a.replace(".NS", "")} & ${p.b.replace(".NS", "")} (${p.correlation.toFixed(2)})`).join(", ")} move together — that's one bet, not two.`
+                  : " No pair of holdings is highly correlated."}
+              </p>
+              <table className="jr-tbl">
+                <thead><tr><th>Holding</th><th>Beta</th><th>Volatility</th><th>Most correlated with</th></tr></thead>
+                <tbody>
+                  {risk.holdings.map((h) => (
+                    <tr key={h.symbol}>
+                      <td>{h.symbol.replace(".NS", "")}</td>
+                      <td>{h.beta?.toFixed(2) ?? "—"}</td>
+                      <td>{h.volatility_pct !== null ? `${h.volatility_pct.toFixed(0)}%/yr` : "—"}</td>
+                      <td className={h.high_correlation ? "q-bad" : ""}>{h.most_correlated_with ? `${h.most_correlated_with.replace(".NS", "")} (${h.max_correlation?.toFixed(2)})` : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+        </section>
+        <section className="panel jr-panel">
+          <h2>Exit discipline</h2>
+          <p className="muted" style={{ marginTop: 0 }}>
+            Exits that followed an exit-plan rule (stop, target, 20 EMA, time stop) versus exits made on instinct.
+          </p>
+          {summary.byDiscipline.length === 0 ? (
+            <p className="muted">Close a trade to start tracking this.</p>
+          ) : (
+            <>
+              <table className="jr-tbl">
+                <thead><tr><th>Exit type</th><th>Trades</th><th>Win rate</th><th>Avg R</th><th>P&L</th></tr></thead>
+                <tbody>
+                  {summary.byDiscipline.map((g) => (
+                    <tr key={g.key}>
+                      <td>{g.key}</td><td>{g.trades}</td><td>{Math.round(g.winRate * 100)}%</td>
+                      <td className={g.avgR === null ? "" : g.avgR >= 0 ? "q-ok" : "q-bad"}>{g.avgR === null ? "—" : `${g.avgR.toFixed(2)}R`}</td>
+                      <td className={g.pnl >= 0 ? "q-ok" : "q-bad"}>{fmtINR(g.pnl)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="jr-hint">
+                {(() => {
+                  const ruled = summary.byDiscipline.find((g) => g.key.startsWith("Followed"))?.trades ?? 0;
+                  const total = summary.byDiscipline.reduce((a, g) => a + g.trades, 0);
+                  return `You followed the plan on ${Math.round((ruled / total) * 100)}% of exits.`;
+                })()}
+              </p>
+            </>
+          )}
+        </section>
+      </div>
 
       {/* Pattern performance */}
       <section className="panel jr-panel">
@@ -380,6 +540,12 @@ export function JournalShell() {
         .jr-close { display:flex; flex-direction:column; gap:6px; min-width:210px; }
         .jr-close-reasons { display:flex; flex-wrap:wrap; gap:4px; }
         .jr-2col { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+        .jr-exit { min-width:220px; max-width:280px; }
+        .jr-exit-msg { font-size:0.82rem; margin:4px 0; line-height:1.4; }
+        .jr-exit .mini-btn { margin-top:6px; }
+        .jr-risk-top { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:10px; }
+        .jr-risk-top strong { font-family:var(--font-space-grotesk),sans-serif; font-size:1.25rem; }
+        .jr-risk-note { font-size:0.85rem; margin:0 0 12px; }
         .jr-add { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; padding:16px; border:1px dashed var(--line); border-radius:16px; margin-bottom:16px; background:rgba(255,255,255,0.45); }
         @media (max-width:960px) {
           .jr-head, .jr-2col { grid-template-columns:1fr; }

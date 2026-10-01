@@ -189,6 +189,29 @@ export function StockDetailShell({ symbol }: { symbol: string }) {
                   sub={s.peer_rank.sector_leader ? "Sector leader ✓" : s.peer_rank.top_peers.length ? `Stronger: ${s.peer_rank.top_peers.join(", ")}` : "Mid-pack"}
                   ok={s.peer_rank.sector_leader ? true : s.peer_rank.sector_laggard ? false : undefined} />
               )}
+              {s.sector_rotation && (
+                <IndCard label="Sector rotation" value={`#${s.sector_rotation.rank} of ${s.sector_rotation.sector_count}`}
+                  sub={`${s.sector_rotation.sector}: ${s.sector_rotation.excess_return_3m_pct > 0 ? "+" : ""}${s.sector_rotation.excess_return_3m_pct.toFixed(1)}% vs Nifty (3M)`}
+                  ok={s.sector_rotation.leading ? true : s.sector_rotation.lagging ? false : undefined} />
+              )}
+              {s.rs_line && (
+                <IndCard label="RS line vs Nifty"
+                  value={s.rs_line.leads_price ? "Leads price" : s.rs_line.rs_line_new_high ? "At new high" : `${s.rs_line.distance_from_rs_high_pct.toFixed(1)}% off high`}
+                  sub={s.rs_line.leads_price ? `RS at a 52-week high, price still ${s.rs_line.price_distance_from_high_pct.toFixed(1)}% below its own` : "Stock ÷ Nifty, 52-week view"}
+                  ok={s.rs_line.rs_line_new_high ? true : undefined} />
+              )}
+              {s.smart_money && (
+                <IndCard label="Delivery today"
+                  value={s.smart_money.latest_delivery_pct != null ? `${s.smart_money.latest_delivery_pct.toFixed(0)}%` : "No NSE data"}
+                  sub={s.smart_money.delivery_ratio != null ? `${s.smart_money.delivery_ratio.toFixed(1)}× its 10-day average${s.smart_money.delivery_spike ? " — spike" : ""}` : "Delivery file unavailable"}
+                  ok={s.smart_money.delivery_spike ? true : undefined} />
+              )}
+              {s.smart_money && (
+                <IndCard label="Bulk / block deals (10d)"
+                  value={s.smart_money.bulk_deal_source === "unavailable" ? "Unavailable" : `${s.smart_money.bulk_deal_buys} buy · ${s.smart_money.bulk_deal_sells} sell`}
+                  sub={s.smart_money.bulk_deal_source === "unavailable" ? "NSE archive not reachable from the server" : s.smart_money.bulk_deal_net_qty === 0 ? "No large deals" : `Net ${s.smart_money.bulk_deal_net_qty > 0 ? "buying" : "selling"} ${Math.abs(s.smart_money.bulk_deal_net_qty).toLocaleString("en-IN")} shares`}
+                  ok={s.smart_money.bulk_deal_net_qty > 0 ? true : s.smart_money.bulk_deal_net_qty < 0 ? false : undefined} />
+              )}
               <IndCard label="Next results"
                 value={s.event_risk.earnings_date ? fmtDate(String(s.event_risk.earnings_date)) : "Unknown"}
                 sub={s.event_risk.blackout ? "Inside blackout — do not enter" : s.event_risk.days_to_earnings !== null ? `${s.event_risk.days_to_earnings} days away` : "Check the NSE corporate calendar"}

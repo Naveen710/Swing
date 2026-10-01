@@ -1,6 +1,8 @@
 import {
   BacktestRunState,
   MarketRegimeSnapshot,
+  PortfolioRiskResponse,
+  SectorRotationResponse,
   PerformanceSummary,
   PortfolioBacktestResult,
   ScanUniverse,
@@ -90,4 +92,19 @@ export async function getPortfolioBacktest(universe: ScanUniverse): Promise<Port
   } catch {
     return null; // 404 when no run exists yet
   }
+}
+
+export function getSectorRotation(universe: ScanUniverse): Promise<SectorRotationResponse> {
+  return request<SectorRotationResponse>(`/sectors?universe=${universe}`);
+}
+
+export function getPortfolioRisk(body: {
+  holdings: { symbol: string; value: number }[];
+  candidates?: string[];
+  capital?: number;
+}): Promise<PortfolioRiskResponse> {
+  return request<PortfolioRiskResponse>("/portfolio/risk", {
+    method: "POST",
+    body: JSON.stringify({ candidates: [], ...body }),
+  });
 }

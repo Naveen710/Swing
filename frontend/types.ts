@@ -3,7 +3,8 @@ export type PatternType =
   | "ema_pullback"
   | "relative_strength_breakout"
   | "support_bounce"
-  | "volatility_contraction";
+  | "volatility_contraction"
+  | "gap_momentum";
 
 export type MarketCapBucket = "large_cap" | "mid_cap" | "small_cap";
 export type ScanUniverse =
@@ -123,6 +124,64 @@ export interface FundamentalSnapshot {
   passes: boolean | null;
 }
 
+export interface RsLineSnapshot {
+  rs_line_new_high: boolean;
+  leads_price: boolean;
+  distance_from_rs_high_pct: number;
+  price_distance_from_high_pct: number;
+}
+
+export interface SectorRotationSnapshot {
+  sector: string;
+  rank: number;
+  sector_count: number;
+  stocks: number;
+  excess_return_1m_pct: number;
+  excess_return_3m_pct: number;
+  score: number;
+  leading: boolean;
+  lagging: boolean;
+}
+
+export interface SmartMoneySnapshot {
+  delivery_spike: boolean;
+  delivery_ratio: number | null;
+  latest_delivery_pct: number | null;
+  breakout: boolean;
+  bulk_deal_buys: number;
+  bulk_deal_sells: number;
+  bulk_deal_net_qty: number;
+  bulk_deal_source: string;
+}
+
+export interface SectorRotationResponse {
+  universe: string;
+  generated_at: string | null;
+  sectors: SectorRotationSnapshot[];
+}
+
+export interface SymbolRisk {
+  symbol: string;
+  beta: number | null;
+  volatility_pct: number | null;
+  max_correlation: number | null;
+  most_correlated_with: string | null;
+  high_correlation: boolean;
+}
+
+export interface PortfolioRiskResponse {
+  sessions: number;
+  benchmark_name: string;
+  portfolio_beta: number | null;
+  capital_weighted_beta: number | null;
+  average_pairwise_correlation: number | null;
+  holdings: SymbolRisk[];
+  candidates: SymbolRisk[];
+  high_correlation_pairs: { a: string; b: string; correlation: number }[];
+  correlation_threshold: number;
+  unavailable: string[];
+}
+
 export type RegimeName = "bull" | "neutral" | "bear" | "unknown";
 
 export interface MarketRegimeSnapshot {
@@ -191,6 +250,9 @@ export interface TradeSetup {
   peer_rank?: PeerRankSnapshot | null;
   fundamentals?: FundamentalSnapshot | null;
   quality_flags?: string[];
+  rs_line?: RsLineSnapshot | null;
+  sector_rotation?: SectorRotationSnapshot | null;
+  smart_money?: SmartMoneySnapshot | null;
   signal_date?: string | null;
   historical_win_rate?: number | null;
   calibration_samples?: number | null;

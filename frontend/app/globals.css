@@ -408,3 +408,17 @@ th {
 @media (max-width: 960px) {
   .rg-head { flex-direction:column; }
 }
+
+/* ── Sector rotation ───────────────────────────────────────────── */
+.sr-panel { margin-bottom:24px; }
+.sr-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+.sr-title { font-size:1.1rem; margin:0 0 4px; }
+.sr-sub { margin:0 0 14px; font-size:0.86rem; max-width:72ch; }
+.sr-empty { margin:6px 0 0; font-size:0.88rem; }
+.sr-groups { display:grid; gap:12px; }
+.sr-label { display:block; font-size:0.78rem; font-weight:700; margin-bottom:6px; }
+.sr-chips { display:flex; flex-wrap:wrap; gap:8px; }
+.sr-chip { font-size:0.82rem; padding:6px 12px; border-radius:12px; border:1px solid var(--line); background:rgba(255,255,255,0.7); }
+.sr-chip b { font-weight:600; margin-right:4px; }
+.sr-chip--lead { border-color:rgba(22,108,90,0.25); background:rgba(22,108,90,0.06); }
+.sr-chip--lag { border-color:rgba(185,75,81,0.25); background:rgba(185,75,81,0.05); }
