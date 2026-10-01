@@ -27,6 +27,7 @@ def detect_best_pattern(
         detect_relative_strength_breakout(frame, relative_strength),
         detect_support_bounce(frame),
         detect_volatility_contraction(frame),
+        detect_gap_momentum(frame),
     ]
     matches = [candidate for candidate in candidates if candidate is not None]
     if not matches:
@@ -344,6 +345,86 @@ def detect_support_bounce(frame: pd.DataFrame) -> PatternMatch | None:
         trigger_price=round(float(recent_high * 1.003), 2),
         support_price=round(float(support_level), 2),
         reward_multiple=2.0,
+    )
+
+
+GAP_MIN_PCT = 4.0
+GAP_MIN_VOLUME_MULTIPLE = 3.0
+GAP_LOOKBACK_SESSIONS = 10
+
+
+def detect_gap_momentum(frame: pd.DataFrame) -> PatternMatch | None:
+    """Post-results / news momentum: a >=4% gap-up on >=3x volume that closed in the
+    upper half of its range, still holding above the gap-day low. Stocks like this tend
+    to keep drifting higher for weeks; the entry is a break above the post-gap high."""
+    if len(frame) < 60:
+        return None
+
+    opens = frame["Open"].to_numpy(dtype=float)
+    highs = frame["High"].to_numpy(dtype=float)
+    lows = frame["Low"].to_numpy(dtype=float)
+    closes = frame["Close"].to_numpy(dtype=float)
+    volumes = frame["Volume"].to_numpy(dtype=float)
+    n = len(frame)
+
+    gap_idx = None
+    for i in range(n - 1, max(n - 1 - GAP_LOOKBACK_SESSIONS, 21), -1):
+        prior_close = closes[i - 1]
+        avg_volume = volumes[i - 21 : i - 1].mean()
+        if prior_close <= 0 or avg_volume <= 0:
+            continue
+        gap_pct = (opens[i] / prior_close - 1) * 100
+        volume_multiple = volumes[i] / avg_volume
+        day_range = max(highs[i] - lows[i], 1e-9)
+        close_position = (closes[i] - lows[i]) / day_range
+        if (
+            gap_pct >= GAP_MIN_PCT
+            and volume_multiple >= GAP_MIN_VOLUME_MULTIPLE
+            and close_position >= 0.5
+            and closes[i] > prior_close * 1.03
+        ):
+            gap_idx = i
+            break
+    if gap_idx is None:
+        return None
+
+    gap_low = lows[gap_idx]
+    gap_close = closes[gap_idx]
+    gap_pct = (opens[gap_idx] / closes[gap_idx - 1] - 1) * 100
+    volume_multiple = volumes[gap_idx] / volumes[gap_idx - 21 : gap_idx - 1].mean()
+    post = slice(gap_idx, n)
+    latest = frame.iloc[-1]
+
+    # The gap must still be "held": no close below the gap-day low, price not
+    # given back, and not already extended far beyond the gap close.
+    if closes[post].min() < gap_low:
+        return None
+    if latest["Close"] < gap_close * 0.97 or latest["Close"] > gap_close * 1.12:
+        return None
+    if latest["Close"] < latest["ema20"]:
+        return None
+
+    sessions_since = n - 1 - gap_idx
+    post_gap_high = highs[post].max()
+    strength = 0.6
+    strength += 0.06 if gap_pct >= 7 else 0.03 if gap_pct >= 5.5 else 0.0
+    strength += 0.06 if volume_multiple >= 5 else 0.03 if volume_multiple >= 4 else 0.0
+    strength += 0.05 if 2 <= sessions_since <= 7 else 0.0   # a short pause after the gap is ideal
+    strength += 0.04 if latest["Close"] >= gap_close else 0.0
+    strength += 0.03 if latest["ema20"] > latest["ema50"] else 0.0
+
+    when = "today" if sessions_since == 0 else f"{sessions_since} session{'s' if sessions_since != 1 else ''} ago"
+    explanation = (
+        f"Gapped up {gap_pct:.1f}% on {volume_multiple:.1f}x volume {when} (typical of a strong results "
+        "or news reaction) and is holding above the gap-day low. Check the announcement before entering."
+    )
+    return PatternMatch(
+        pattern=PatternType.GAP_MOMENTUM,
+        strength=round(min(strength, 0.85), 3),
+        explanation=explanation,
+        trigger_price=round(float(post_gap_high * 1.003), 2),
+        support_price=round(float(gap_low), 2),
+        reward_multiple=2.6,
     )
 
 

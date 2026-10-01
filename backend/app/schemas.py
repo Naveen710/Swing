@@ -12,6 +12,7 @@ class PatternType(str, Enum):
     RELATIVE_STRENGTH_BREAKOUT = "relative_strength_breakout"
     SUPPORT_BOUNCE = "support_bounce"
     VOLATILITY_CONTRACTION = "volatility_contraction"
+    GAP_MOMENTUM = "gap_momentum"
 
 
 class MarketCapBucket(str, Enum):
@@ -147,6 +148,82 @@ class FundamentalSnapshot(BaseModel):
     passes: bool | None = None
 
 
+class RsLineSnapshot(BaseModel):
+    rs_line_new_high: bool
+    leads_price: bool
+    distance_from_rs_high_pct: float
+    price_distance_from_high_pct: float
+
+
+class SectorRotationSnapshot(BaseModel):
+    sector: str
+    rank: int
+    sector_count: int
+    stocks: int
+    excess_return_1m_pct: float
+    excess_return_3m_pct: float
+    score: float
+    leading: bool
+    lagging: bool
+
+
+class SmartMoneySnapshot(BaseModel):
+    delivery_spike: bool = False
+    delivery_ratio: float | None = None
+    latest_delivery_pct: float | None = None
+    breakout: bool = False
+    bulk_deal_buys: int = 0
+    bulk_deal_sells: int = 0
+    bulk_deal_net_qty: float = 0.0
+    bulk_deal_source: str = "unavailable"
+
+
+class SectorRotationResponse(BaseModel):
+    universe: ScanUniverse
+    generated_at: datetime | None = None
+    sectors: list[SectorRotationSnapshot] = Field(default_factory=list)
+
+
+class PortfolioHoldingInput(BaseModel):
+    symbol: str
+    value: float = Field(gt=0)
+
+
+class PortfolioRiskRequest(BaseModel):
+    holdings: list[PortfolioHoldingInput] = Field(default_factory=list)
+    candidates: list[str] = Field(default_factory=list)
+    capital: float | None = None
+    lookback_sessions: int = Field(default=120, ge=40, le=250)
+
+
+class SymbolRisk(BaseModel):
+    symbol: str
+    beta: float | None
+    volatility_pct: float | None
+    max_correlation: float | None = None
+    most_correlated_with: str | None = None
+    high_correlation: bool = False
+
+
+class CorrelationPair(BaseModel):
+    a: str
+    b: str
+    correlation: float
+
+
+class PortfolioRiskResponse(BaseModel):
+    sessions: int
+    benchmark_name: str
+    portfolio_beta: float | None
+    capital_weighted_beta: float | None
+    average_pairwise_correlation: float | None
+    holdings: list[SymbolRisk]
+    candidates: list[SymbolRisk]
+    high_correlation_pairs: list[CorrelationPair]
+    correlation_threshold: float
+    unavailable: list[str] = Field(default_factory=list)
+
+
 class MarketRegimeSnapshot(BaseModel):
     regime: str
     score: float
@@ -213,6 +290,9 @@ class TradeSetup(BaseModel):
     peer_rank: PeerRankSnapshot | None = None
     fundamentals: FundamentalSnapshot | None = None
     quality_flags: list[str] = Field(default_factory=list)
+    rs_line: RsLineSnapshot | None = None
+    sector_rotation: SectorRotationSnapshot | None = None
+    smart_money: SmartMoneySnapshot | None = None
     signal_date: date | None = None
     historical_win_rate: float | None = None
     calibration_samples: int | None = None

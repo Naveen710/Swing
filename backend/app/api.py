@@ -3,7 +3,16 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from app.config import settings
-from app.schemas import MarketRegimeSnapshot, ScanRequest, ScanStatusResponse, ScanUniverse
+from app.schemas import (
+    MarketRegimeSnapshot,
+    PortfolioRiskRequest,
+    PortfolioRiskResponse,
+    ScanRequest,
+    ScanStatusResponse,
+    ScanUniverse,
+    SectorRotationResponse,
+)
+from app.services.portfolio_risk import compute_portfolio_risk
 from app.services.db import is_persistent
 from app.services.portfolio_backtest import PortfolioBacktestRunner, latest_result
 from app.services.scanner import scanner_service
@@ -49,6 +58,21 @@ def get_scan_status() -> ScanStatusResponse:
 def get_market_regime(refresh: bool = False) -> MarketRegimeSnapshot:
     """Market regime: trend, breadth and volatility context plus recommended thresholds."""
     return scanner_service.market_regime(force=refresh)
+
+
+@router.get("/sectors")
+def get_sector_rotation(universe: ScanUniverse = ScanUniverse.NIFTY500) -> SectorRotationResponse:
+    """Top-down sector ranking from the most recent scan of this universe."""
+    generated_at, sectors = scanner_service.sector_rotation(universe)
+    return SectorRotationResponse(universe=universe, generated_at=generated_at, sectors=sectors)
+
+
+@router.post("/portfolio/risk")
+def get_portfolio_risk(request: PortfolioRiskRequest) -> PortfolioRiskResponse:
+    """Beta of each holding vs Nifty, portfolio beta, and correlation of candidates with holdings."""
+    context = scanner_service._load_benchmark_context(request.lookback_sessions + 40)
+    frame = context.benchmark_frame if context is not None else None
+    return compute_portfolio_risk(scanner_service.market_data, frame, request)
 
 
 @router.get("/performance")

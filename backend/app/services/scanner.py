@@ -18,6 +18,9 @@ from app.schemas import (
     PeerRankSnapshot,
     PriceLevelSnapshot,
     RelativeStrengthSnapshot,
+    RsLineSnapshot,
+    SectorRotationSnapshot,
+    SmartMoneySnapshot,
     ScanRequest,
     ScanResponse,
     ScanUniverse,
@@ -31,10 +34,14 @@ from app.services.delivery_data import DeliveryTrend, NseDeliveryDataProvider
 from app.services.event_risk import YahooEventRiskProvider
 from app.services.fundamentals import YahooFundamentalsProvider, unknown_fundamentals
 from app.services.market_regime import MarketRegimeService
+from app.services.bulk_deals import BulkDealProvider
 from app.services.trend_overlays import (
     build_peer_ranks,
     build_price_levels,
+    build_rs_line,
+    build_sector_rotation,
     build_weekly_trend,
+    trailing_returns,
 )
 from app.services.indicators import apply_indicators
 from app.services.market_data import MarketDataError, create_market_data_provider
@@ -89,6 +96,9 @@ class TradeCandidate:
     weekly_trend: WeeklyTrendSnapshot | None = None
     peer_rank: PeerRankSnapshot | None = None
     fundamentals: FundamentalSnapshot | None = None
+    rs_line: RsLineSnapshot | None = None
+    sector_rotation: SectorRotationSnapshot | None = None
+    smart_money: SmartMoneySnapshot | None = None
 
 
 @dataclass
@@ -96,6 +106,8 @@ class ScanSink:
     """Collects universe-wide facts while scanning (peer RS scores and market breadth)."""
 
     scores: dict[str, tuple[str, float]] = field(default_factory=dict)
+    returns: dict[str, tuple[str, float, float]] = field(default_factory=dict)
+    benchmark_returns: tuple[float, float] | None = None
     above_ema50: int = 0
     total: int = 0
     rejected: dict[str, str] = field(default_factory=dict)
@@ -105,9 +117,18 @@ class ScanSink:
         with self.lock:
             self.rejected[symbol] = reason
 
-    def record(self, symbol: str, sector: str, rs_score: float, above_ema50: bool) -> None:
+    def record(
+        self,
+        symbol: str,
+        sector: str,
+        rs_score: float,
+        above_ema50: bool,
+        trailing: tuple[float, float] | None = None,
+    ) -> None:
         with self.lock:
             self.scores[symbol] = (sector, rs_score)
+            if trailing is not None:
+                self.returns[symbol] = (sector, trailing[0], trailing[1])
             self.total += 1
             if above_ema50:
                 self.above_ema50 += 1
@@ -132,6 +153,8 @@ class ScannerService:
         self.event_risk = YahooEventRiskProvider()
         self.fundamentals = YahooFundamentalsProvider()
         self.regime = MarketRegimeService(self.market_data)
+        self.bulk_deals = BulkDealProvider()
+        self._sector_rotation: dict[str, tuple[datetime, list[SectorRotationSnapshot]]] = {}
         self.last_rejected: dict[str, str] = {}
         self.ledger = SignalLedger(self.market_data)
         self.calibration = Calibrator()
@@ -221,7 +244,7 @@ class ScannerService:
     ) -> ScanResponse:
         benchmark_context = self._load_benchmark_context(request.lookback_days)
         delivery_trends = self._load_delivery_trends(benchmark_context)
-        sink = ScanSink()
+        sink = ScanSink(benchmark_returns=self._benchmark_returns(benchmark_context))
         candidates = self._collect_candidates(
             listings,
             request,
@@ -368,6 +391,7 @@ class ScannerService:
                     listing.sector,
                     relative_strength.score,
                     bool(latest_row["Close"] > latest_row["ema50"]),
+                    trailing_returns(enriched["Close"]),
                 )
             match = detect_best_pattern(enriched, relative_strength)
             if match is None:
@@ -380,6 +404,9 @@ class ScannerService:
                 investment_amount=request.investment_amount,
                 relative_strength=relative_strength,
                 delivery_trends=delivery_trends,
+                benchmark_close=(
+                    benchmark_context.benchmark_frame["Close"] if benchmark_context is not None else None
+                ),
             )
             if not plan_is_tradeable(
                 TradePlan(candidate.entry_price, candidate.stop_loss, candidate.target_price)
@@ -415,6 +442,7 @@ class ScannerService:
         investment_amount: int,
         relative_strength: RelativeStrengthSnapshot,
         delivery_trends: dict[str, DeliveryTrend],
+        benchmark_close=None,
     ) -> TradeCandidate:
         latest = frame.iloc[-1]
         liquidity = build_liquidity_snapshot(frame)
@@ -448,6 +476,20 @@ class ScannerService:
         overlay_prob, overlay_rank = self._trend_overlay_adjustments(
             price_levels, weekly_trend, float(latest["volume_ratio"])
         )
+        rs_line = build_rs_line(frame, benchmark_close)
+        if rs_line is not None and rs_line.leads_price:
+            overlay_prob += 0.03
+            overlay_rank += 0.04
+        elif rs_line is not None and rs_line.rs_line_new_high:
+            overlay_prob += 0.01
+            overlay_rank += 0.01
+        smart_money = self._delivery_signal(frame, delivery_trends.get(listing.symbol.upper()))
+        if smart_money.delivery_spike and smart_money.breakout:
+            overlay_prob += 0.04
+            overlay_rank += 0.05
+        elif smart_money.delivery_spike:
+            overlay_prob += 0.01
+            overlay_rank += 0.01
         probability = round(min(0.95, max(0.35, probability + overlay_prob)), 3)
         expected_return_pct = round(((target_price / entry) - 1) * 100, 2)
         expected_profit_amount = round(
@@ -508,6 +550,8 @@ class ScannerService:
             setup_state=setup_state,
             price_levels=price_levels,
             weekly_trend=weekly_trend,
+            rs_line=rs_line,
+            smart_money=smart_money,
         )
 
     def _finalize_trade_setup(
@@ -617,6 +661,9 @@ class ScannerService:
             peer_rank=candidate.peer_rank,
             fundamentals=candidate.fundamentals,
             quality_flags=quality_flags,
+            rs_line=candidate.rs_line,
+            sector_rotation=candidate.sector_rotation,
+            smart_money=candidate.smart_money,
             signal_date=candidate.reference_date,
             historical_win_rate=historical_win_rate,
             calibration_samples=calibration_samples,
@@ -673,6 +720,8 @@ class ScannerService:
 
         if sink is not None and sink.scores:
             enriched = self._apply_peer_rank_overlay(enriched, sink)
+        if sink is not None and sink.returns and sink.benchmark_returns is not None:
+            enriched = self._apply_sector_rotation_overlay(enriched, sink, request.universe)
 
         if request.universe == ScanUniverse.MID_SMALL_2000_PLUS:
             enriched = [self._apply_advanced_discovery_score(candidate) for candidate in enriched]
@@ -680,6 +729,7 @@ class ScannerService:
         if self._external_overlays_enabled():
             enriched = self._apply_event_risk_overlay(enriched)
             enriched = self._apply_fundamentals_overlay(enriched)
+            enriched = self._apply_bulk_deal_overlay(enriched)
 
         return [
             candidate
@@ -704,6 +754,88 @@ class ScannerService:
         if benchmark_context is not None and not benchmark_context.benchmark_frame.empty:
             return benchmark_context.benchmark_frame.index[-1].date()
         return datetime.now(UTC).date()
+
+    def _benchmark_returns(self, benchmark_context) -> tuple[float, float] | None:
+        if benchmark_context is None:
+            return None
+        return trailing_returns(benchmark_context.benchmark_frame["Close"])
+
+    def sector_rotation(self, universe: ScanUniverse) -> tuple[datetime | None, list[SectorRotationSnapshot]]:
+        return self._sector_rotation.get(universe.value, (None, []))
+
+    def _apply_sector_rotation_overlay(
+        self,
+        candidates: list[TradeCandidate],
+        sink: ScanSink,
+        universe: ScanUniverse,
+    ) -> list[TradeCandidate]:
+        with sink.lock:
+            returns = dict(sink.returns)
+        rotation = build_sector_rotation(returns, sink.benchmark_returns)
+        self._sector_rotation[universe.value] = (
+            datetime.now(UTC),
+            sorted(rotation.values(), key=lambda r: r.rank),
+        )
+        adjusted: list[TradeCandidate] = []
+        for candidate in candidates:
+            snap = rotation.get(candidate.listing.sector)
+            if snap is None:
+                adjusted.append(candidate)
+                continue
+            adj = 0.03 if snap.leading else -0.03 if snap.lagging else 0.0
+            adjusted.append(
+                replace(
+                    candidate,
+                    sector_rotation=snap,
+                    probability_score=round(min(0.95, max(0.35, candidate.probability_score + adj)), 3),
+                    ranking_score=round(candidate.ranking_score + adj * 1.3, 3),
+                )
+            )
+        return adjusted
+
+    def _delivery_signal(self, frame, trend: DeliveryTrend | None) -> SmartMoneySnapshot:
+        """Delivery spike: today's delivery % at least 1.5x its 10-day average (and >= 40%)."""
+        prior_high = float(frame["High"].iloc[-21:-1].max()) if len(frame) > 21 else float("inf")
+        breakout = bool(float(frame["Close"].iloc[-1]) > prior_high)
+        if trend is None or trend.average_delivery_pct_10d <= 0:
+            return SmartMoneySnapshot(breakout=breakout)
+        ratio = trend.latest_delivery_pct / trend.average_delivery_pct_10d
+        return SmartMoneySnapshot(
+            delivery_spike=bool(trend.latest_delivery_pct >= 40 and ratio >= 1.5),
+            delivery_ratio=round(ratio, 2),
+            latest_delivery_pct=round(trend.latest_delivery_pct, 1),
+            breakout=breakout,
+        )
+
+    def _apply_bulk_deal_overlay(self, candidates: list[TradeCandidate]) -> list[TradeCandidate]:
+        try:
+            self.bulk_deals.refresh()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Bulk deal refresh failed. %s", exc)
+        if not self.bulk_deals.available:
+            return candidates
+        adjusted: list[TradeCandidate] = []
+        for candidate in candidates:
+            deals = self.bulk_deals.summary_for(candidate.listing.symbol)
+            base = candidate.smart_money or SmartMoneySnapshot()
+            smart = base.model_copy(update={
+                "bulk_deal_buys": deals["buys"], "bulk_deal_sells": deals["sells"],
+                "bulk_deal_net_qty": deals["net_qty"], "bulk_deal_source": deals["source"],
+            })
+            adj = 0.0
+            if deals["buys"] and deals["net_qty"] > 0:
+                adj = 0.02
+            elif deals["sells"] and deals["net_qty"] < 0:
+                adj = -0.03
+            adjusted.append(
+                replace(
+                    candidate,
+                    smart_money=smart,
+                    probability_score=round(min(0.95, max(0.35, candidate.probability_score + adj)), 3),
+                    ranking_score=round(candidate.ranking_score + adj, 3),
+                )
+            )
+        return adjusted
 
     def _external_overlays_enabled(self) -> bool:
         return settings.enable_external_overlays and settings.market_data_provider != "demo"
@@ -822,6 +954,12 @@ class ScannerService:
         if candidate.peer_rank is not None and candidate.peer_rank.sector_laggard:
             peers = ", ".join(candidate.peer_rank.top_peers) or "sector leaders"
             flags.append(f"Sector laggard — stronger peers: {peers}")
+        rotation = candidate.sector_rotation
+        if rotation is not None and rotation.lagging:
+            flags.append(f"{rotation.sector} is lagging the market (sector rank {rotation.rank}/{rotation.sector_count})")
+        smart = candidate.smart_money
+        if smart is not None and smart.bulk_deal_sells and smart.bulk_deal_net_qty < 0:
+            flags.append("Net bulk/block selling in the last 10 sessions")
         fundamentals = candidate.fundamentals
         if fundamentals is not None and fundamentals.passes is False:
             flags.append(
@@ -848,6 +986,16 @@ class ScannerService:
         peer = candidate.peer_rank
         if peer is not None:
             parts.append(f"Sector RS rank {peer.rank}/{peer.peer_count} in {peer.sector}.")
+        rotation = candidate.sector_rotation
+        if rotation is not None and rotation.leading:
+            parts.append(f"{rotation.sector} ranks #{rotation.rank} of {rotation.sector_count} sectors on 1- and 3-month relative strength.")
+        if candidate.rs_line is not None and candidate.rs_line.leads_price:
+            parts.append("Relative-strength line is at a new high while price is not yet — a leadership tell.")
+        smart = candidate.smart_money
+        if smart is not None and smart.delivery_spike:
+            parts.append(f"Delivery spiked to {smart.latest_delivery_pct:.0f}% ({smart.delivery_ratio:.1f}x its 10-day average).")
+        if smart is not None and smart.bulk_deal_buys and smart.bulk_deal_net_qty > 0:
+            parts.append("Net bulk/block buying in the last 10 sessions.")
         return (" " + " ".join(parts)) if parts else ""
 
     def _apply_advanced_discovery_score(
@@ -1156,6 +1304,7 @@ class ScannerService:
             state.benchmark_context = self._load_benchmark_context(
                 state.request.lookback_days
             )
+            state.sink.benchmark_returns = self._benchmark_returns(state.benchmark_context)
             state.delivery_trends = self._load_delivery_trends(
                 state.benchmark_context
             )

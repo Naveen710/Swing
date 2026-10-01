@@ -5,7 +5,13 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 
-from app.schemas import PeerRankSnapshot, PriceLevelSnapshot, WeeklyTrendSnapshot
+from app.schemas import (
+    PeerRankSnapshot,
+    PriceLevelSnapshot,
+    RsLineSnapshot,
+    SectorRotationSnapshot,
+    WeeklyTrendSnapshot,
+)
 
 NEAR_52W_HIGH_PCT = 3.0
 PRICE_DISCOVERY_LOOKBACK = 5
@@ -117,3 +123,73 @@ def build_peer_ranks(
             top_peers=[peer for peer in ordered[:4] if peer != symbol][:3],
         )
     return ranks
+
+
+def build_rs_line(frame: pd.DataFrame, benchmark_close: pd.Series | None) -> RsLineSnapshot | None:
+    """Relative-strength line = stock / Nifty. A new RS high while price is still below
+    its own high means the stock is quietly outperforming — often institutional buying."""
+    if benchmark_close is None or len(frame) < 60:
+        return None
+    bench = benchmark_close.reindex(frame.index).ffill()
+    rs = (frame["Close"] / bench).dropna()
+    if len(rs) < 60:
+        return None
+    window = rs.tail(252)
+    rs_high = float(window.max())
+    recent_rs = float(window.tail(3).max())
+    rs_distance = max(0.0, (rs_high - float(window.iloc[-1])) / rs_high * 100)
+    price_high = float(frame["High"].tail(252).max())
+    price_distance = max(0.0, (price_high - float(frame["Close"].iloc[-1])) / price_high * 100)
+    new_high = recent_rs >= rs_high * 0.999
+    return RsLineSnapshot(
+        rs_line_new_high=new_high,
+        leads_price=new_high and price_distance > 2.0,
+        distance_from_rs_high_pct=round(rs_distance, 2),
+        price_distance_from_high_pct=round(price_distance, 2),
+    )
+
+
+def build_sector_rotation(
+    stock_returns: dict[str, tuple[str, float, float]],
+    benchmark_returns: tuple[float, float],
+    min_members: int = 3,
+    leaders: int = 4,
+) -> dict[str, SectorRotationSnapshot]:
+    """Rank every sector in the scanned universe by its median excess return over
+    ~1 month (21 sessions) and ~3 months (63 sessions), weighted 40/60."""
+    bench_1m, bench_3m = benchmark_returns
+    members: dict[str, list[tuple[float, float]]] = defaultdict(list)
+    for sector, r1m, r3m in stock_returns.values():
+        if sector and sector.lower() not in {"unknown", "benchmark"}:
+            members[sector].append((r1m - bench_1m, r3m - bench_3m))
+
+    rows = []
+    for sector, values in members.items():
+        if len(values) < min_members:
+            continue
+        ex1 = float(np.median([v[0] for v in values]))
+        ex3 = float(np.median([v[1] for v in values]))
+        rows.append((sector, len(values), ex1, ex3, 0.4 * ex1 + 0.6 * ex3))
+    rows.sort(key=lambda r: r[4], reverse=True)
+
+    count = len(rows)
+    out: dict[str, SectorRotationSnapshot] = {}
+    for rank, (sector, stocks, ex1, ex3, score) in enumerate(rows, start=1):
+        out[sector] = SectorRotationSnapshot(
+            sector=sector, rank=rank, sector_count=count, stocks=stocks,
+            excess_return_1m_pct=round(ex1, 2), excess_return_3m_pct=round(ex3, 2),
+            score=round(score, 2),
+            leading=rank <= leaders,
+            lagging=count >= 8 and rank > count * 0.75,
+        )
+    return out
+
+
+def trailing_returns(closes: pd.Series) -> tuple[float, float] | None:
+    if len(closes) < 64:
+        return None
+    last = float(closes.iloc[-1])
+    return (
+        (last / float(closes.iloc[-22]) - 1) * 100,
+        (last / float(closes.iloc[-64]) - 1) * 100,
+    )

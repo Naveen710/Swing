@@ -174,6 +174,7 @@ def run_portfolio_backtest(scanner, universe: ScanUniverse, years: int = 2, max_
                 cand = scanner._build_trade_candidate(
                     listing=listing, frame=window, match=match, investment_amount=100000,
                     relative_strength=rs, delivery_trends={},
+                    benchmark_close=bench["Close"].loc[:day],
                 )
             except Exception:  # noqa: BLE001
                 i += 1
@@ -430,7 +431,7 @@ def _metrics(trades, equity_curve, final_equity, invested_days, calendar, bench,
             f"Exits: stop, target, or time stop after {settings.trade_max_hold_sessions} sessions; gaps fill at the open",
             f"Costs: {settings.trade_round_trip_cost_pct}% round trip (brokerage, STT, stamp duty, slippage)",
             "Regime thresholds and weekly-trend gate applied as in the live system",
-            "Not modelled: earnings blackout, fundamentals, sector-peer rank (no point-in-time history)",
+            "Not modelled (no point-in-time history): earnings blackout, fundamentals, sector-peer rank, sector rotation, delivery spikes, bulk deals",
             "Survivorship bias: only currently listed stocks are tested, which flatters results",
         ],
     }
