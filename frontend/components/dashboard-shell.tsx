@@ -9,6 +9,7 @@ import { exportWorkbook, regimeRows, setupRow } from "../lib/excel";
 import { AppNav } from "./app-nav";
 import { OpportunitiesTable } from "./opportunities-table";
 import { RegimeBanner, useMarketRegime } from "./regime-banner";
+import { QuantScreenPanel } from "./quant-screen-panel";
 import { SectorRotationPanel } from "./sector-rotation-panel";
 import { TradingSystemPanel } from "./trading-system-panel";
 
@@ -37,6 +38,7 @@ export function DashboardShell() {
   const [investmentAmount, setInvestmentAmount] = useState(DEFAULT_INVESTMENT);
   const [selectedSector, setSelectedSector] = useState("All sectors");
   const [showTradingSystem, setShowTradingSystem] = useState(false);
+  const [showQuant, setShowQuant] = useState(false);
   const marketRegime = useMarketRegime();
 
   async function refreshDashboard(
@@ -341,6 +343,12 @@ export function DashboardShell() {
               >
                 {showTradingSystem ? "Hide trading system" : "Trading system"}
               </button>
+              <button
+                className={showQuant ? "primary-button" : "secondary-button"}
+                onClick={() => setShowQuant((v) => !v)}
+              >
+                {showQuant ? "Hide quant screen" : "Quant screen"}
+              </button>
             </div>
           </div>
 
@@ -450,6 +458,7 @@ export function DashboardShell() {
       </section>
 
       {showTradingSystem && <TradingSystemPanel />}
+      {showQuant && <QuantScreenPanel />}
     </main>
   );
 }

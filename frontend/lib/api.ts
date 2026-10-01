@@ -3,6 +3,7 @@ import {
   MarketRegimeSnapshot,
   PortfolioRiskResponse,
   SectorRotationResponse,
+  QuantScreenResponse,
   StockAnalysis,
   StockSearchResult,
   PerformanceSummary,
@@ -117,4 +118,8 @@ export function searchStocks(query: string, limit = 8): Promise<StockSearchResul
 
 export function analyzeStock(symbol: string): Promise<StockAnalysis> {
   return request<StockAnalysis>(`/analyze/${encodeURIComponent(symbol)}`);
+}
+
+export function getQuantScreen(universe: ScanUniverse, top: number, refresh = false): Promise<QuantScreenResponse> {
+  return request<QuantScreenResponse>(`/quant?universe=${universe}&top=${top}${refresh ? "&refresh=true" : ""}`);
 }

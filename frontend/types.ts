@@ -486,3 +486,56 @@ export interface StockAnalysis {
   candles: Candle[];
   data_notes: string[];
 }
+
+export interface QuantStats {
+  total_return_pct: number;
+  cagr_pct: number | null;
+  volatility_pct: number;
+  sharpe: number | null;
+  max_drawdown_pct: number;
+}
+
+export interface QuantPick {
+  rank: number;
+  symbol: string;
+  company_name: string;
+  sector: string;
+  price: number;
+  score: number;
+  percentile: number;
+  weight_pct: number;
+  volatility_pct: number;
+  factors: Record<string, { z: number | null; raw: number | null }>;
+}
+
+export interface QuantScreenResponse {
+  available: boolean;
+  reason?: string;
+  universe: string;
+  as_of: string;
+  eligible: number;
+  loaded: number;
+  top_n: number;
+  factor_weights: Record<string, number>;
+  factor_labels: Record<string, string>;
+  rules: string[];
+  picks: QuantPick[];
+  validation: {
+    available: boolean;
+    reason?: string;
+    start?: string;
+    end?: string;
+    rebalances?: number;
+    strategy?: QuantStats;
+    universe?: QuantStats;
+    benchmark?: QuantStats | null;
+    hit_rate?: number;
+    ic_mean?: number;
+    ic_t_stat?: number;
+    excess_t_stat?: number;
+    significant?: boolean;
+    curve?: { date: string; strategy: number; universe: number; benchmark: number }[];
+    cost_pct_round_trip?: number;
+  };
+  generated_at: string;
+}
