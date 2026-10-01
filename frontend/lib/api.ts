@@ -3,6 +3,8 @@ import {
   MarketRegimeSnapshot,
   PortfolioRiskResponse,
   SectorRotationResponse,
+  StockAnalysis,
+  StockSearchResult,
   PerformanceSummary,
   PortfolioBacktestResult,
   ScanUniverse,
@@ -107,4 +109,12 @@ export function getPortfolioRisk(body: {
     method: "POST",
     body: JSON.stringify({ candidates: [], ...body }),
   });
+}
+
+export function searchStocks(query: string, limit = 8): Promise<StockSearchResult[]> {
+  return request<StockSearchResult[]>(`/search?q=${encodeURIComponent(query)}&limit=${limit}`);
+}
+
+export function analyzeStock(symbol: string): Promise<StockAnalysis> {
+  return request<StockAnalysis>(`/analyze/${encodeURIComponent(symbol)}`);
 }

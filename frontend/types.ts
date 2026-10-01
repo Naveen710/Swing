@@ -414,3 +414,75 @@ export interface BacktestRunState {
   finished_at?: string;
   error?: string | null;
 }
+
+export interface StockSearchResult {
+  symbol: string;
+  company_name: string;
+  sector: string;
+  market_cap_bucket: MarketCapBucket;
+}
+
+export interface AnalysisFactor {
+  name: string;
+  value: string;
+  status: "good" | "neutral" | "bad" | "na";
+  note: string;
+}
+
+export interface AnalysisCategory {
+  name: string;
+  weight: number;
+  score: number | null;
+  factors: AnalysisFactor[];
+}
+
+export interface AnalysisSection {
+  available: boolean;
+  score: number | null;
+  grade: string | null;
+  label: string | null;
+  categories: AnalysisCategory[];
+  note: string | null;
+}
+
+export interface StockAnalysis {
+  symbol: string;
+  company_name: string;
+  sector: string;
+  industry: string | null;
+  description: string | null;
+  in_scan_universe: boolean;
+  price: number;
+  change_pct: number;
+  as_of: string;
+  market_cap_cr: number | null;
+  overall_score: number;
+  overall_grade: string;
+  overall_label: string;
+  summary: string;
+  technical: AnalysisSection;
+  fundamental: AnalysisSection;
+  strengths: string[];
+  concerns: string[];
+  setup: {
+    pattern: PatternType;
+    explanation: string;
+    entry: number;
+    stop: number;
+    target: number;
+    risk_reward: number;
+    tradeable: boolean;
+  } | null;
+  levels: {
+    support_20d: number;
+    resistance_20d: number;
+    support_60d: number;
+    resistance_60d: number;
+    high_52w: number;
+    low_52w: number;
+    atr_pct: number;
+  };
+  regime: string | null;
+  candles: Candle[];
+  data_notes: string[];
+}

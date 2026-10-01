@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { useJournal, useWatchlist } from "../lib/store";
+import { StockSearch } from "./stock-search";
 
 export function AppNav() {
   const pathname = usePathname();
@@ -21,6 +22,7 @@ export function AppNav() {
   return (
     <nav className="app-nav">
       <span className="app-nav-brand">NSE Swing</span>
+      <StockSearch />
       <div className="app-nav-links">
         {links.map((l) => (
           <Link key={l.href} href={l.href}
