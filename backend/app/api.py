@@ -143,12 +143,14 @@ def valuation(
     terminal: float | None = None,
     discount: float | None = None,
     mos: float | None = None,
+    shares: float | None = None,
 ):
     """DCF + reverse DCF. Assumptions are optional overrides (percent values)."""
     if method not in (None, "fcf", "earnings"):
         raise HTTPException(status_code=400, detail="method must be 'fcf' or 'earnings'")
     overrides = {"method": method, "base_cash_flow": base_cash_flow, "growth_pct": growth,
-                 "terminal_growth_pct": terminal, "discount_rate_pct": discount, "margin_of_safety_pct": mos}
+                 "terminal_growth_pct": terminal, "discount_rate_pct": discount, "margin_of_safety_pct": mos,
+                 "shares": shares if shares and shares > 0 else None}
     result = build_valuation(scanner_service, financials_provider, symbol, overrides)
     if result is None:
         raise HTTPException(status_code=404, detail=f"No price data for {symbol.upper()}.")

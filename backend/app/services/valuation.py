@@ -148,17 +148,53 @@ class FinancialsProvider:
 
     def _fetch(self, symbol: str) -> dict:
         info = self.fundamentals.get_info(symbol) or {}
-        cashflow = income = None
+        cashflow = income = balance = None
         try:
             ticker = importlib.import_module("yfinance").Ticker(symbol)
             cashflow = ticker.cashflow
             income = ticker.income_stmt
         except Exception as exc:  # noqa: BLE001
             logger.warning("Statements unavailable for %s. %s", symbol, exc)
-        return assemble(info, cashflow, income, source="yahoo")
+        if not info.get("sharesOutstanding"):
+            try:
+                balance = ticker.balance_sheet
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Balance sheet unavailable for %s. %s", symbol, exc)
+        return assemble(info, cashflow, income, source="yahoo", balance=balance)
 
 
-def assemble(info: dict, cashflow, income, source: str) -> dict:
+def resolve_shares(info: dict, income=None, balance=None) -> tuple[float | None, str | None]:
+    """Yahoo often omits sharesOutstanding for smaller/newer NSE listings. Try every other
+    published figure, most reliable first, and report which one was used."""
+    def num(key):
+        try:
+            v = float(info.get(key))
+            return v if v > 0 and not math.isnan(v) else None
+        except (TypeError, ValueError):
+            return None
+
+    if num("sharesOutstanding"):
+        return num("sharesOutstanding"), "reported shares outstanding"
+    if num("impliedSharesOutstanding"):
+        return num("impliedSharesOutstanding"), "implied shares outstanding"
+    price = num("currentPrice") or num("regularMarketPrice") or num("previousClose")
+    if num("marketCap") and price:
+        return num("marketCap") / price, "market cap ÷ share price"
+    for row in ("Ordinary Shares Number", "Share Issued"):
+        latest = _row(balance, row)
+        if latest and latest[-1][1] > 0:
+            return latest[-1][1], f"balance sheet ({row.lower()}, FY{str(latest[-1][0])[-2:]})"
+    for row in ("Diluted Average Shares", "Basic Average Shares"):
+        latest = _row(income, row)
+        if latest and latest[-1][1] > 0:
+            return latest[-1][1], f"income statement ({row.lower()}, FY{str(latest[-1][0])[-2:]})"
+    eps, ni = num("trailingEps"), num("netIncomeToCommon")
+    if eps and ni:
+        return ni / eps, "net profit ÷ EPS (estimate)"
+    return None, None
+
+
+def assemble(info: dict, cashflow, income, source: str, balance=None) -> dict:
     fcf = _row(cashflow, "Free Cash Flow")
     ocf = _row(cashflow, "Operating Cash Flow", "Cash Flow From Continuing Operating Activities")
     capex = _row(cashflow, "Capital Expenditure")
@@ -175,6 +211,7 @@ def assemble(info: dict, cashflow, income, source: str) -> dict:
         except (TypeError, ValueError):
             return None
 
+    shares, shares_source = resolve_shares(info, income, balance)
     years = sorted({y for y, _ in fcf + net_income + revenue})
     lookup = lambda pairs: dict(pairs)  # noqa: E731
     history = [
@@ -189,7 +226,8 @@ def assemble(info: dict, cashflow, income, source: str) -> dict:
         "industry": info.get("industry"),
         "currency": info.get("financialCurrency") or "INR",
         "price": num("currentPrice") or num("regularMarketPrice"),
-        "shares": num("sharesOutstanding"),
+        "shares": shares,
+        "shares_source": shares_source,
         "cash": num("totalCash") or 0.0,
         "debt": num("totalDebt") or 0.0,
         "beta": num("beta"),
@@ -218,6 +256,7 @@ def demo_financials(symbol: str) -> dict:
     return {
         "source": "demo", "name": f"{symbol.removesuffix('.NS')} (demo data)", "sector": "Industrials",
         "industry": "Demo", "currency": "INR", "price": round(price, 2), "shares": shares,
+        "shares_source": "demo",
         "cash": base_rev * 0.1, "debt": base_rev * 0.15, "beta": 0.9 + (seed % 7) / 10,
         "ttm_fcf": hist[-1]["free_cash_flow"], "ttm_net_income": hist[-1]["net_income"], "history": hist,
     }
@@ -295,10 +334,13 @@ def value_company(data: dict, price: float, overrides: dict) -> dict:
 
     g, gt, r = a["growth_pct"] / 100, a["terminal_growth_pct"] / 100, a["discount_rate_pct"] / 100
     shares, cash, debt = data["shares"], data["cash"], data["debt"]
+    if overrides.get("shares"):
+        shares = overrides["shares"]
     base = a["base_cash_flow"]
     warnings = [n for n in defaults["notes"] if n.startswith(("Banks", "Free cash flow has been negative"))]
     if not shares:
-        return {"available": False, "reason": "Shares outstanding aren't published for this stock, so a per-share value can't be computed."}
+        return {"available": False, "needs_shares": True,
+                "reason": "The data source doesn't publish this company's share count, so a per-share value can't be computed automatically. Enter the number of shares below — you'll find it on the company's NSE/BSE page or in its latest annual report."}
     if base is None or base <= 0:
         return {"available": False, "reason": "The company's cash flows/profits are negative — a DCF can't value a business that doesn't yet generate cash. Use the reverse DCF only after it turns cash-positive."}
     if r <= gt:
@@ -393,7 +435,8 @@ def build_valuation(scanner, provider: FinancialsProvider, symbol: str, override
     if not price:
         return None
 
-    shares = data.get("shares")
+    shares = overrides.get("shares") or data.get("shares")
+    shares_source = "entered by you" if overrides.get("shares") else data.get("shares_source")
     result = {
         "symbol": sym,
         "company_name": data.get("name") or (listing.company_name if listing else sym),
@@ -403,7 +446,7 @@ def build_valuation(scanner, provider: FinancialsProvider, symbol: str, override
         "price": round(price, 2),
         "market_cap_cr": round(price * shares / 1e7) if shares else None,
         "is_financial": is_financial(data),
-        "cash": data.get("cash"), "debt": data.get("debt"), "shares": shares,
+        "cash": data.get("cash"), "debt": data.get("debt"), "shares": shares, "shares_source": shares_source,
         "history": data["history"],
     }
     if not data["history"] and not data.get("ttm_fcf") and not data.get("ttm_net_income"):
