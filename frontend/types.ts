@@ -552,6 +552,7 @@ export interface ValuationAssumptions {
 export interface ValuationResult {
   available: boolean;
   reason?: string;
+  needs_shares?: boolean;
   assumptions: ValuationAssumptions;
   defaults: ValuationAssumptions;
   historical: { historical_growth_pct: number | null; revenue_cagr_pct: number | null; profit_cagr_pct: number | null };
@@ -584,6 +585,7 @@ export interface ValuationResponse {
   cash: number | null;
   debt: number | null;
   shares: number | null;
+  shares_source: string | null;
   history: { year: number; revenue: number | null; net_income: number | null; operating_cash_flow: number | null; capex: number | null; free_cash_flow: number | null }[];
   valuation: ValuationResult;
 }

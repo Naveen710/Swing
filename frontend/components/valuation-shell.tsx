@@ -32,16 +32,20 @@ export function ValuationShell({ symbol }: { symbol: string | null }) {
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [custom, setCustom] = useState(false);
+  const [manualSharesCr, setManualSharesCr] = useState("");
+  const [sharesOverride, setSharesOverride] = useState<number | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  async function load(overrides: Record<string, string | number | null> = {}) {
+  async function load(overrides: Record<string, string | number | null> = {}, shares: number | null = sharesOverride) {
     if (!symbol) return;
+    if (shares) overrides = { ...overrides, shares };
     setLoading(true);
     setError(null);
     try {
       const d = await getValuation(symbol, overrides);
       setData(d);
-      if (d.valuation.available && !Object.keys(overrides).length) setDraft(toDraft(d.valuation.assumptions));
+      const onlyShares = Object.keys(overrides).every((k) => k === "shares");
+      if (d.valuation.available && onlyShares) setDraft(toDraft(d.valuation.assumptions));
     } catch {
       setError(`Couldn't value ${symbol.toUpperCase()}. Check the NSE symbol and try again.`);
     } finally {
@@ -49,7 +53,20 @@ export function ValuationShell({ symbol }: { symbol: string | null }) {
     }
   }
 
-  useEffect(() => { setData(null); setDraft(null); setCustom(false); void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [symbol]);
+  useEffect(() => {
+    setData(null); setDraft(null); setCustom(false); setSharesOverride(null); setManualSharesCr("");
+    void load({}, null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol]);
+
+  function applyShares() {
+    const crore = Number(manualSharesCr);
+    if (!(crore > 0)) return;
+    const shares = crore * 1e7;
+    setSharesOverride(shares);
+    setCustom(false);
+    void load({}, shares);
+  }
 
   function edit(patch: Partial<Draft>) {
     if (!draft) return;
@@ -70,6 +87,11 @@ export function ValuationShell({ symbol }: { symbol: string | null }) {
     setCustom(false);
     void load();
   }
+  const sharesNote = sharesOverride
+    ? "You entered the share count manually."
+    : data?.shares_source && !data.shares_source.startsWith("reported") && data.source !== "demo"
+      ? `Share count wasn't published directly — estimated from ${data.shares_source}.`
+      : null;
 
   useEffect(() => {
     // After a method switch the server chooses a new base cash flow — show it in the form.
@@ -173,7 +195,21 @@ export function ValuationShell({ symbol }: { symbol: string | null }) {
           </section>
 
           {!v?.available ? (
-            <section className="panel"><p className="error-text" style={{ margin: 0 }}>{v?.reason}</p></section>
+            <section className="panel">
+              <p className={v?.needs_shares ? "vl-need" : "error-text"} style={{ margin: 0 }}>{v?.reason}</p>
+              {v?.needs_shares && (
+                <div className="vl-shares-form">
+                  <label className="field">Shares outstanding (in crore)
+                    <input type="number" min="0" step="0.01" placeholder="e.g. 8.75" value={manualSharesCr}
+                      onChange={(e) => setManualSharesCr(e.target.value)} onKeyDown={(e) => e.key === "Enter" && applyShares()} />
+                  </label>
+                  <button className="primary-button" onClick={applyShares} disabled={!(Number(manualSharesCr) > 0) || loading}>
+                    {loading ? "Calculating…" : "Calculate valuation"}
+                  </button>
+                  <p className="muted vl-small">1 crore = 1,00,00,000 shares. Exchanges list this as &quot;Issued size&quot; or &quot;Total shares&quot;.</p>
+                </div>
+              )}
+            </section>
           ) : (
             <>
               <div className="vl-top">
@@ -206,7 +242,12 @@ export function ValuationShell({ symbol }: { symbol: string | null }) {
                 </section>
               </div>
 
-              {v.warnings.length > 0 && <div className="vl-warn">{v.warnings.map((w) => <p key={w}>⚠ {w}</p>)}</div>}
+              {(v.warnings.length > 0 || sharesNote) && (
+                <div className="vl-warn">
+                  {v.warnings.map((w) => <p key={w}>⚠ {w}</p>)}
+                  {sharesNote && <p>ℹ {sharesNote}{sharesOverride && <button className="mini-btn vl-inline" onClick={() => { setSharesOverride(null); void load({}, null); }}>Clear</button>}</p>}
+                </div>
+              )}
 
               <section className="panel vl-panel">
                 <div className="vl-panel-head">
@@ -263,7 +304,10 @@ export function ValuationShell({ symbol }: { symbol: string | null }) {
                       <tr><td>+ Cash</td><td>{cr(v.dcf.cash)}</td></tr>
                       <tr><td>− Debt</td><td>{cr(v.dcf.debt)}</td></tr>
                       <tr className="vl-sum"><td>Equity value</td><td>{cr(v.dcf.equity_value)}</td></tr>
-                      <tr><td>÷ Shares outstanding</td><td>{(v.dcf.shares / 1e7).toLocaleString("en-IN", { maximumFractionDigits: 2 })} Cr</td></tr>
+                      <tr>
+                        <td>÷ Shares outstanding{data.shares_source && <small> ({data.shares_source})</small>}</td>
+                        <td>{(v.dcf.shares / 1e7).toLocaleString("en-IN", { maximumFractionDigits: 2 })} Cr</td>
+                      </tr>
                       <tr className="vl-sum vl-final"><td>Intrinsic value per share</td><td>{fmtINR(v.intrinsic_value)}</td></tr>
                     </tbody>
                   </table>
@@ -379,6 +423,11 @@ export function ValuationShell({ symbol }: { symbol: string | null }) {
         .vl-down { background:rgba(185,75,81,0.06); color:var(--red); }
         .vl-centre { outline:2px solid var(--accent); outline-offset:-2px; font-weight:700; }
         .vl-small { font-size:0.8rem; margin:8px 0 0; }
+        .vl-need { color:var(--text); line-height:1.55; }
+        .vl-shares-form { display:flex; flex-wrap:wrap; align-items:flex-end; gap:12px; margin-top:14px; }
+        .vl-shares-form .field { min-width:240px; }
+        .vl-shares-form .vl-small { flex-basis:100%; margin:0; }
+        .vl-inline { margin-left:8px; }
         @media (max-width:960px) {
           .vl-intro, .vl-top, .vl-2col { grid-template-columns:1fr; }
           .vl-verdict-nums { grid-template-columns:1fr 1fr; }
