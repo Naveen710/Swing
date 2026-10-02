@@ -16,6 +16,7 @@ from app.schemas import (
 )
 from app.services.portfolio_risk import compute_portfolio_risk
 from app.services.quant_screen import QuantScreenService
+from app.services.valuation import FinancialsProvider, build_valuation
 from app.services.stock_analysis import analyze_stock, search_stocks
 from app.services.db import is_persistent
 from app.services.portfolio_backtest import PortfolioBacktestRunner, latest_result
@@ -128,6 +129,30 @@ quant_service = QuantScreenService(scanner_service)
 def quant_screen(universe: ScanUniverse = ScanUniverse.NIFTY500, top: int = 20, refresh: bool = False):
     """Multi-factor quant ranking of the whole universe, with its own historical validation."""
     return quant_service.run(universe, max(5, min(top, 50)), refresh=refresh)
+
+
+financials_provider = FinancialsProvider(scanner_service.fundamentals)
+
+
+@router.get("/valuation/{symbol}")
+def valuation(
+    symbol: str,
+    method: str | None = None,
+    base_cash_flow: float | None = None,
+    growth: float | None = None,
+    terminal: float | None = None,
+    discount: float | None = None,
+    mos: float | None = None,
+):
+    """DCF + reverse DCF. Assumptions are optional overrides (percent values)."""
+    if method not in (None, "fcf", "earnings"):
+        raise HTTPException(status_code=400, detail="method must be 'fcf' or 'earnings'")
+    overrides = {"method": method, "base_cash_flow": base_cash_flow, "growth_pct": growth,
+                 "terminal_growth_pct": terminal, "discount_rate_pct": discount, "margin_of_safety_pct": mos}
+    result = build_valuation(scanner_service, financials_provider, symbol, overrides)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"No price data for {symbol.upper()}.")
+    return result
 
 
 @router.get("/search")
