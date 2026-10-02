@@ -7,7 +7,7 @@ import { searchStocks } from "../lib/api";
 import { StockSearchResult } from "../types";
 
 /* Search by symbol or company name; Enter opens the full analysis page. */
-export function StockSearch() {
+export function StockSearch({ basePath = "/analyze", placeholder = "Analyse a stock — name or symbol", autoFocus = false }: { basePath?: string; placeholder?: string; autoFocus?: boolean } = {}) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<StockSearchResult[]>([]);
@@ -36,7 +36,7 @@ export function StockSearch() {
     if (!clean) return;
     setOpen(false);
     setQuery("");
-    router.push(`/analyze/${encodeURIComponent(clean)}`);
+    router.push(`${basePath}/${encodeURIComponent(clean)}`);
   }
 
   function onKey(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -51,7 +51,8 @@ export function StockSearch() {
       <input
         className="ss-input"
         type="search"
-        placeholder="Analyse a stock — name or symbol"
+        placeholder={placeholder}
+        autoFocus={autoFocus}
         aria-label="Search for a stock to analyse"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -71,7 +72,7 @@ export function StockSearch() {
           ))}
           {results.length === 0 && (
             <li className="ss-item ss-item--hint" onMouseDown={(e) => { e.preventDefault(); go(query); }}>
-              Not in the scanner lists — press Enter to analyse <b>{query.trim().toUpperCase()}</b> as an NSE symbol
+              Not in the scanner lists — press Enter to look up <b>{query.trim().toUpperCase()}</b> as an NSE symbol
             </li>
           )}
         </ul>

@@ -539,3 +539,51 @@ export interface QuantScreenResponse {
   };
   generated_at: string;
 }
+
+export interface ValuationAssumptions {
+  method: "fcf" | "earnings";
+  base_cash_flow: number;
+  growth_pct: number;
+  terminal_growth_pct: number;
+  discount_rate_pct: number;
+  margin_of_safety_pct: number;
+}
+
+export interface ValuationResult {
+  available: boolean;
+  reason?: string;
+  assumptions: ValuationAssumptions;
+  defaults: ValuationAssumptions;
+  historical: { historical_growth_pct: number | null; revenue_cagr_pct: number | null; profit_cagr_pct: number | null };
+  intrinsic_value: number;
+  buy_below: number;
+  verdict: "Undervalued" | "Fairly valued" | "Overvalued";
+  upside_pct: number;
+  fair_band_pct: number;
+  dcf: {
+    rows: { year: number; growth_pct: number; cash_flow: number; discount_factor: number; present_value: number }[];
+    pv_cash_flows: number; terminal_value: number; pv_terminal: number; enterprise_value: number;
+    cash: number; debt: number; equity_value: number; shares: number; terminal_share_pct: number | null;
+  };
+  scenarios: { bear: number; base: number; bull: number };
+  sensitivity: { discount_rates_pct: number[]; terminal_growth_pct: number[]; values: (number | null)[][] };
+  reverse_dcf: { implied_growth_pct: number | null; historical_growth_pct: number | null; assumed_growth_pct: number; interpretation: string };
+  warnings: string[];
+  default_notes: string[];
+}
+
+export interface ValuationResponse {
+  symbol: string;
+  company_name: string;
+  sector: string | null;
+  industry: string | null;
+  source: string;
+  price: number;
+  market_cap_cr: number | null;
+  is_financial: boolean;
+  cash: number | null;
+  debt: number | null;
+  shares: number | null;
+  history: { year: number; revenue: number | null; net_income: number | null; operating_cash_flow: number | null; capex: number | null; free_cash_flow: number | null }[];
+  valuation: ValuationResult;
+}

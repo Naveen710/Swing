@@ -16,6 +16,7 @@ export function AppNav() {
     { href: "/", label: "Scanner" },
     { href: "/watchlist", label: "Watchlist", count: watchlist.length },
     { href: "/journal", label: "Journal", count: open },
+    { href: "/valuation", label: "Valuation" },
     { href: "/performance", label: "Performance" },
   ];
 
@@ -26,7 +27,7 @@ export function AppNav() {
       <div className="app-nav-links">
         {links.map((l) => (
           <Link key={l.href} href={l.href}
-            className={`app-nav-link ${pathname === l.href ? "app-nav-link--on" : ""}`}>
+            className={`app-nav-link ${pathname === l.href || (l.href !== "/" && pathname?.startsWith(l.href + "/")) ? "app-nav-link--on" : ""}`}>
             {l.label}
             {l.count ? <span className="app-nav-count">{l.count}</span> : null}
           </Link>

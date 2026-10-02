@@ -6,6 +6,7 @@ import {
   QuantScreenResponse,
   StockAnalysis,
   StockSearchResult,
+  ValuationResponse,
   PerformanceSummary,
   PortfolioBacktestResult,
   ScanUniverse,
@@ -122,4 +123,11 @@ export function analyzeStock(symbol: string): Promise<StockAnalysis> {
 
 export function getQuantScreen(universe: ScanUniverse, top: number, refresh = false): Promise<QuantScreenResponse> {
   return request<QuantScreenResponse>(`/quant?universe=${universe}&top=${top}${refresh ? "&refresh=true" : ""}`);
+}
+
+export function getValuation(symbol: string, overrides: Record<string, string | number | null | undefined> = {}): Promise<ValuationResponse> {
+  const params = new URLSearchParams();
+  Object.entries(overrides).forEach(([k, v]) => { if (v !== null && v !== undefined && v !== "") params.set(k, String(v)); });
+  const qs = params.toString();
+  return request<ValuationResponse>(`/valuation/${encodeURIComponent(symbol)}${qs ? `?${qs}` : ""}`);
 }

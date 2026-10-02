@@ -128,6 +128,7 @@ export function StockAnalysisShell({ symbol }: { symbol: string }) {
           <p className="an-summary">{d.summary}</p>
           <div className="an-actions">
             <button className="mini-btn" onClick={exportExcel}>Export to Excel</button>
+            <Link className="mini-btn mini-btn--primary" href={`/valuation/${base}`}>DCF valuation</Link>
             {d.in_scan_universe && <Link className="mini-btn" href={`/stocks/${d.symbol}`}>Scanner view</Link>}
           </div>
         </div>
