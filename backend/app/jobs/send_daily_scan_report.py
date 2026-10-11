@@ -31,6 +31,14 @@ def main() -> int:
     except Exception as exc:  # noqa: BLE001
         print(f"Ledger evaluation skipped: {exc}")
 
+    # Multibagger forward ledger: one snapshot per calendar month (first daily run of the month).
+    try:
+        from app.jobs.run_multibagger import run_monthly
+
+        print(run_monthly())
+    except Exception as exc:  # noqa: BLE001
+        print(f"Multibagger monthly snapshot skipped: {exc}")
+
     if not args.dry_run and not settings.email_report_enabled:
         print("Scans recorded to the ledger. Email report is disabled, so nothing was sent.")
         return 0

@@ -122,8 +122,8 @@ def _vix(scanner, rows: int) -> pd.Series | None:
 
 
 def load_panel(scanner, universe: ScanUniverse, rows: int, max_symbols: int | None = None,
-               progress=None) -> Panel:
-    listings = load_universe(universe=universe)
+               progress=None, listings: list[StockListing] | None = None) -> Panel:
+    listings = list(listings) if listings is not None else load_universe(universe=universe)
     if max_symbols and len(listings) > max_symbols:
         step = len(listings) / max_symbols
         listings = [listings[int(i * step)] for i in range(max_symbols)]

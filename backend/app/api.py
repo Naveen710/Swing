@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import re
+from datetime import date
+
 from fastapi import APIRouter, HTTPException
 
 from app.config import settings
@@ -23,6 +26,7 @@ from app.services.stock_analysis import analyze_stock, search_stocks
 from app.services.db import is_persistent
 from app.services.portfolio_backtest import PortfolioBacktestRunner, latest_result
 from app.services.scanner import scanner_service
+from app.services.multibagger import MultibaggerService
 
 router = APIRouter()
 backtest_runner = PortfolioBacktestRunner(scanner_service)
@@ -213,6 +217,78 @@ def vcp_monitor(body: dict):
     """Post-buy health of open positions: [{symbol, entry_date, entry_price}]."""
     positions = [p for p in body.get("positions", []) if p.get("symbol") and p.get("entry_date") and p.get("entry_price")]
     return vcp_service.monitor(positions)
+
+
+multibagger_service = MultibaggerService(scanner_service)
+
+
+def _parse_exclude(exclude: str) -> set[str]:
+    return {x.strip().upper().removesuffix(".NS") for x in exclude.split(",") if x.strip()}
+
+
+@router.post("/multibagger/run")
+def multibagger_run(universe: ScanUniverse = ScanUniverse.NIFTY_SMALLCAP_250, exclude: str = "",
+                    refresh_fundamentals: bool = False):
+    """Start the multibagger screen in the background; poll /multibagger/status."""
+    started = multibagger_service.start_run(universe, _parse_exclude(exclude), refresh_fundamentals)
+    state = multibagger_service.get_state()
+    if not started:
+        state["reason"] = f"A multibagger {state.get('job')} is already running."
+    return {"started": started, "state": state}
+
+
+@router.get("/multibagger/status")
+def multibagger_status():
+    return multibagger_service.get_state()
+
+
+@router.get("/multibagger")
+def multibagger_result(universe: ScanUniverse = ScanUniverse.NIFTY_SMALLCAP_250):
+    result = multibagger_service.latest(universe)
+    if result is None:
+        raise HTTPException(status_code=404, detail="No run yet for this universe — press Run screen.")
+    return result
+
+
+@router.get("/multibagger/stock/{symbol}")
+def multibagger_stock(symbol: str):
+    if not re.fullmatch(r"[A-Za-z0-9&^.\-]{1,30}", symbol):
+        raise HTTPException(status_code=400, detail="Use an NSE symbol such as DIXON.")
+    result = multibagger_service.stock(symbol)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"No price data for {symbol.upper()}.")
+    return result
+
+
+@router.post("/multibagger/backtest")
+def multibagger_backtest_start(universe: ScanUniverse = ScanUniverse.NIFTY_SMALLCAP_250, start: str = "2015-01-01"):
+    try:
+        date.fromisoformat(start)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="start must be YYYY-MM-DD") from exc
+    started = multibagger_service.start_backtest(universe, start)
+    state = multibagger_service.get_state()
+    if not started:
+        state["reason"] = f"A multibagger {state.get('job')} is already running."
+    return {"started": started, "state": state}
+
+
+@router.get("/multibagger/backtest")
+def multibagger_backtest_result(universe: ScanUniverse = ScanUniverse.NIFTY_SMALLCAP_250):
+    result = multibagger_service.latest_backtest(universe)
+    if result is None:
+        raise HTTPException(status_code=404, detail="No price backtest has been run for this universe yet.")
+    return result
+
+
+@router.get("/multibagger/ledger")
+def multibagger_ledger(universe: ScanUniverse = ScanUniverse.NIFTY_SMALLCAP_250):
+    return multibagger_service.ledger(universe)
+
+
+@router.post("/multibagger/ledger/evaluate")
+def multibagger_ledger_evaluate():
+    return multibagger_service.evaluate_ledger()
 
 
 @router.get("/search")

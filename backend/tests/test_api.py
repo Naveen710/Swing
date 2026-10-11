@@ -43,3 +43,47 @@ def test_vcp_monitor_empty():
 def test_universe_screens(path):
     r = client.get(path, params={"universe": "nifty_smallcap_250"})
     assert r.status_code in (200, 503), r.text
+
+
+# ── Multibagger (AC 11) ──────────────────────────────────────────────────────
+import time  # noqa: E402
+
+
+def test_multibagger_backtest_404_before_any_run():
+    assert client.get("/api/multibagger/backtest", params={"universe": "mid_small_2000_plus"}).status_code == 404
+
+
+def test_multibagger_run_end_to_end():
+    first = client.post("/api/multibagger/run", params={"universe": "nifty_smallcap_250"}).json()
+    assert first["started"] is True
+    second = client.post("/api/multibagger/run", params={"universe": "nifty_smallcap_250"}).json()
+    assert second["started"] is False and second["state"]["reason"]
+    deadline = time.time() + 240
+    state = {}
+    while time.time() < deadline:
+        state = client.get("/api/multibagger/status").json()
+        if not state["running"]:
+            break
+        time.sleep(1)
+    assert state["stage"] == "done", state
+    body = client.get("/api/multibagger", params={"universe": "nifty_smallcap_250"}).json()
+    assert body["available"] is True and body["demo"] is True
+    assert set(body["funnel"]) == {"universe_count", "after_size_bucket", "after_prefilter", "deep_pass", "not_deep_passed",
+                                   "passed_kill_switches", "tiered", "insufficient"}
+    assert body["funnel"]["deep_pass"] <= 120
+    row = body["results"][0]
+    assert row["rank"] == 1 and row["tier"] in "ABCD" and set(row["layers"]) == {"growth", "quality", "valuation", "tailwind", "price"}
+    assert [r["score"] for r in body["results"]] == sorted((r["score"] for r in body["results"]), reverse=True)
+
+
+def test_multibagger_single_stock():
+    r = client.get("/api/multibagger/stock/RELIANCE")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] in ("scored", "excluded", "insufficient")
+    assert body.get("tier") or body.get("code") or body.get("reason")
+
+
+def test_multibagger_ledger_endpoint():
+    r = client.get("/api/multibagger/ledger", params={"universe": "nifty_smallcap_250"})
+    assert r.status_code == 200 and "decision" in r.json()

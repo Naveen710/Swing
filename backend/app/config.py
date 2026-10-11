@@ -109,6 +109,16 @@ class Settings:
     regime_cache_ttl_minutes: int = int(os.getenv("REGIME_CACHE_TTL_MINUTES", "15"))
     regime_breadth_sample: int = int(os.getenv("REGIME_BREADTH_SAMPLE", "60"))
     vix_symbol: str = os.getenv("VIX_SYMBOL", "^INDIAVIX")
+    multibagger_deep_cap: int = int(os.getenv("MULTIBAGGER_DEEP_CAP", "120"))
+    multibagger_fund_workers: int = int(os.getenv("MULTIBAGGER_FUND_WORKERS", "4"))
+    multibagger_fund_ttl_days: int = int(os.getenv("MULTIBAGGER_FUND_TTL_DAYS", "7"))
+    multibagger_backtest_max_symbols: int = int(os.getenv("MULTIBAGGER_BACKTEST_MAX_SYMBOLS", "300"))
+    multibagger_hindsight_symbols: tuple[str, ...] = tuple(
+        s.strip().upper() for s in os.getenv(
+            "MULTIBAGGER_HINDSIGHT_SYMBOLS",
+            "DIXON.NS,DEEPAKNTR.NS,APARINDS.NS,KPITTECH.NS,CGPOWER.NS,TANLA.NS,VAKRANGEE.NS,PCJEWELLER.NS",
+        ).split(",") if s.strip()
+    )
     event_data_cache_ttl_minutes: int = int(
         os.getenv("EVENT_DATA_CACHE_TTL_MINUTES", "360")
     )
