@@ -55,6 +55,8 @@ services:
         value: https://archives.nseindia.com/content/equities/EQUITY_L.csv
       - key: CORS_ORIGINS
         value: https://naveen710-swing-web.onrender.com,http://localhost:3000
+      - key: DATABASE_URL
+        sync: false
 
   - type: web
     name: naveen710-swing-web
@@ -147,4 +149,6 @@ services:
       - key: EMAIL_SMTP_USERNAME
         sync: false
       - key: EMAIL_SMTP_PASSWORD
+        sync: false
+      - key: DATABASE_URL
         sync: false

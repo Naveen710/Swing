@@ -188,6 +188,37 @@ official exchange CSV. Sector and market-cap values are still most accurate for
 the built-in curated basket, while the broader NSE list uses lightweight sector
 guessing and defaults unknown names to `small_cap`.
 
+## Signal ledger, portfolio backtest and calibration
+
+Every published pick is written to a database and graded later with the same
+entry, stop, target, 20-session time stop and 0.25% round-trip costs that the
+backtests use (`app/services/trade_sim.py` is the single source of truth).
+
+- Set `DATABASE_URL` (any Postgres URL) on **both** the API service and the daily
+  cron job so they share one ledger. Without it, a local SQLite file is used,
+  which is wiped whenever a Render instance restarts.
+- The daily cron job now always scans all three universes and grades open
+  signals; `EMAIL_REPORT_ENABLED` only controls whether the email is sent.
+- Portfolio backtests started from the website test an evenly spread sample of
+  `WEB_BACKTEST_MAX_SYMBOLS` (default 120) stocks. For the full universe, run it
+  on your own machine against the production database:
+
+```bash
+cd backend
+pip install -r requirements.txt
+export MARKET_DATA_PROVIDER=yahoo UNIVERSE_PROVIDER=bundled_csv
+export DATABASE_URL="<your Postgres URL>"   # Windows PowerShell: $env:DATABASE_URL="..."
+python -m app.jobs.run_portfolio_backtest --universe nifty500 --years 2
+```
+
+  The result and the recalibrated score appear on the Performance page.
+- Data-quality guard: stocks whose last bar lags the market by more than
+  `STALE_DATA_MAX_LAG_DAYS`, that show a one-day move above
+  `STALE_DATA_MAX_GAP_PCT` (usually an unadjusted split), or that have no volume
+  for 5 sessions are skipped and listed after each scan.
+- Setups whose structural stop is more than `MAX_STOP_PCT` (default 8%) below
+  entry are skipped.
+
 ## What to build next
 
 1. Persist candles and signals in PostgreSQL instead of in-memory storage.
@@ -195,3 +226,19 @@ guessing and defaults unknown names to `small_cap`.
 3. Integrate the trained model artifact into the probability engine.
 4. Swap the SVG chart for TradingView or Lightweight Charts.
 5. Add richer company metadata for the full NSE universe so sector and market-cap filters stay accurate.
+
+## AI agent team (Claude Code)
+
+Open this repo in Claude Code and the agents in `.claude/agents/` are available:
+
+| Agent | Role |
+|---|---|
+| `planner` | 30-year Indian-equities strategist + product planner. Writes a testable spec with a validation plan. |
+| `developer` | Implements the spec with tests. |
+| `tester` | Runs the suites, checks every acceptance criterion and edge case, runs the validation backtest. |
+| `reviewer` | Code + quant-methodology review (look-ahead, survivorship, costs, overfitting, security, Render limits). |
+| `deployer` | Branch, PR, CI, then merge and Render deploy only after you confirm. |
+
+- `/ship-feature <idea>` runs plan → develop → test → review → deploy, pausing for your approval after the plan and before deploying.
+- `/find-multibaggers [focus]` asks the planner to turn its multibagger instincts into a testable screen.
+- Tests: `cd backend && python -m pytest -q` and `cd frontend && npm test`. CI runs both on every PR (`.github/workflows/ci.yml`).
