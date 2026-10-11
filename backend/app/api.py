@@ -15,6 +15,8 @@ from app.schemas import (
     StockSearchResult,
 )
 from app.services.portfolio_risk import compute_portfolio_risk
+from app.services.curated_algo import CuratedAlgoService
+from app.services.vcp_scanner import VcpScannerService
 from app.services.quant_screen import QuantScreenService
 from app.services.valuation import FinancialsProvider, build_valuation
 from app.services.stock_analysis import analyze_stock, search_stocks
@@ -155,6 +157,62 @@ def valuation(
     if result is None:
         raise HTTPException(status_code=404, detail=f"No price data for {symbol.upper()}.")
     return result
+
+
+algo_service = CuratedAlgoService(scanner_service)
+
+
+@router.get("/algo")
+def curated_algo(universe: ScanUniverse = ScanUniverse.NIFTY500, exclude: str = "", refresh: bool = False):
+    """Run the curated 5-layer system on today's data."""
+    excluded = {x.strip().upper().removesuffix(".NS") for x in exclude.split(",") if x.strip()}
+    try:
+        return algo_service.live(universe, excluded, refresh=refresh)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.post("/algo/backtest")
+def start_algo_backtest(
+    universe: ScanUniverse = ScanUniverse.NIFTY500,
+    start: str = "2015-01-01",
+    confirmations: int = 3,
+    full: bool = False,
+):
+    """Backtest the curated system from `start` to today. full=true tests every stock (slow)."""
+    confirmations = max(1, min(confirmations, 3))
+    max_symbols = None if full else settings.web_backtest_max_symbols * 2
+    started = algo_service.start_backtest(universe, start, confirmations, max_symbols)
+    return {"started": started, "state": algo_service.bt_state}
+
+
+@router.get("/algo/backtest/status")
+def algo_backtest_status():
+    return algo_service.bt_state
+
+
+@router.get("/algo/backtest")
+def algo_backtest_result(universe: ScanUniverse = ScanUniverse.NIFTY500):
+    result = algo_service.latest_backtest(universe)
+    if result is None:
+        raise HTTPException(status_code=404, detail="No backtest has been run for this universe yet.")
+    return result
+
+
+vcp_service = VcpScannerService(scanner_service)
+
+
+@router.get("/vcp")
+def vcp_scan(universe: ScanUniverse = ScanUniverse.NIFTY500, refresh: bool = False):
+    """Trend template + weekly VCP scan."""
+    return vcp_service.scan(universe, refresh=refresh)
+
+
+@router.post("/vcp/monitor")
+def vcp_monitor(body: dict):
+    """Post-buy health of open positions: [{symbol, entry_date, entry_price}]."""
+    positions = [p for p in body.get("positions", []) if p.get("symbol") and p.get("entry_date") and p.get("entry_price")]
+    return vcp_service.monitor(positions)
 
 
 @router.get("/search")
