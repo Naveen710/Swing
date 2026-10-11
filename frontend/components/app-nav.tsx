@@ -18,6 +18,7 @@ export function AppNav() {
     { href: "/journal", label: "Journal", count: open },
     { href: "/algo", label: "Algo" },
     { href: "/vcp", label: "VCP" },
+    { href: "/multibagger", label: "Multibagger" },
     { href: "/valuation", label: "Valuation" },
     { href: "/performance", label: "Performance" },
   ];

@@ -3,6 +3,11 @@ import {
   AlgoBacktest,
   AlgoLiveResponse,
   MarketRegimeSnapshot,
+  MultibaggerBacktest,
+  MultibaggerLedger,
+  MultibaggerResult,
+  MultibaggerStatus,
+  MultibaggerStockResult,
   PortfolioRiskResponse,
   SectorRotationResponse,
   QuantScreenResponse,
@@ -160,4 +165,47 @@ export function getVcpScan(universe: ScanUniverse, refresh = false): Promise<Vcp
 
 export function getVcpMonitor(positions: { symbol: string; entry_date: string; entry_price: number }[]): Promise<VcpMonitor[]> {
   return request<VcpMonitor[]>("/vcp/monitor", { method: "POST", body: JSON.stringify({ positions }) });
+}
+
+/* ── Multibagger framework ─────────────────────────────────────────── */
+
+export function startMultibagger(universe: ScanUniverse, exclude: string[], refreshFundamentals: boolean) {
+  const q = new URLSearchParams({ universe, exclude: exclude.join(","), refresh_fundamentals: String(refreshFundamentals) });
+  return request<{ started: boolean; state: MultibaggerStatus }>(`/multibagger/run?${q}`, { method: "POST" });
+}
+
+export function getMultibaggerStatus() {
+  return request<MultibaggerStatus>("/multibagger/status");
+}
+
+/** Latest run for the universe, or null when none has been run yet (404). */
+export async function getMultibagger(universe: ScanUniverse): Promise<MultibaggerResult | null> {
+  try {
+    return await request<MultibaggerResult>(`/multibagger?universe=${encodeURIComponent(universe)}`);
+  } catch (e) {
+    if (e instanceof Error && e.message.endsWith("404")) return null;
+    throw e;
+  }
+}
+
+export function getMultibaggerStock(symbol: string) {
+  return request<MultibaggerStockResult>(`/multibagger/stock/${encodeURIComponent(symbol.trim().toUpperCase())}`);
+}
+
+export function startMultibaggerBacktest(universe: ScanUniverse, start = "2015-01-01") {
+  const q = new URLSearchParams({ universe, start });
+  return request<{ started: boolean; state: MultibaggerStatus }>(`/multibagger/backtest?${q}`, { method: "POST" });
+}
+
+export async function getMultibaggerBacktest(universe: ScanUniverse): Promise<MultibaggerBacktest | null> {
+  try {
+    return await request<MultibaggerBacktest>(`/multibagger/backtest?universe=${encodeURIComponent(universe)}`);
+  } catch (e) {
+    if (e instanceof Error && e.message.endsWith("404")) return null;
+    throw e;
+  }
+}
+
+export function getMultibaggerLedger(universe: ScanUniverse) {
+  return request<MultibaggerLedger>(`/multibagger/ledger?universe=${encodeURIComponent(universe)}`);
 }

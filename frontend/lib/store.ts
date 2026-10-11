@@ -12,6 +12,9 @@ const KEYS = {
   journal: "swing.journal.v1",
   watchlist: "swing.watchlist.v1",
   settings: "swing.settings.v1",
+  mbChecklist: "swing.multibagger.checklist.v1",
+  mbSettings: "swing.multibagger.settings.v1",
+  mbExclude: "swing.multibagger.exclude.v1",
 } as const;
 const CHANGE_EVENT = "swing-store-change";
 
@@ -140,6 +143,21 @@ export function useWatchlist() {
 }
 export function useTradingSettings() {
   return useStored<TradingSettings>(KEYS.settings, DEFAULT_SETTINGS);
+}
+
+export type ChecklistAnswer = "yes" | "no" | "unknown";
+export type MultibaggerChecklist = Record<string, { items: Record<string, ChecklistAnswer>; updated: string }>;
+export interface MultibaggerSettings { bucketPct: number; ideas: number }
+export const DEFAULT_MB_SETTINGS: MultibaggerSettings = { bucketPct: 25, ideas: 10 };
+
+export function useMultibaggerChecklist() {
+  return useStored<MultibaggerChecklist>(KEYS.mbChecklist, {});
+}
+export function useMultibaggerSettings() {
+  return useStored<MultibaggerSettings>(KEYS.mbSettings, DEFAULT_MB_SETTINGS);
+}
+export function useMultibaggerExclude() {
+  return useStored<string>(KEYS.mbExclude, "");
 }
 
 /* ── helpers ────────────────────────────────────────────────────────── */

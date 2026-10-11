@@ -725,3 +725,174 @@ export interface VcpMonitor {
   score?: number;
   applicable?: number;
 }
+
+/* ── Multibagger framework ─────────────────────────────────────────── */
+
+export type MultibaggerLayerKey = "growth" | "quality" | "valuation" | "tailwind" | "price";
+export type MultibaggerTiming = "downtrend" | "extended" | "entry_zone" | "watch";
+
+export interface MultibaggerMetric {
+  key: string;
+  label: string;
+  weight: number;
+  value: number | null;
+  display: string;
+  score: number;
+  status: "ok" | "neutral" | "penalised";
+  note: string;
+}
+
+export interface MultibaggerLayer {
+  score: number;
+  weight: number;
+  coverage_pct: number;
+  metrics: MultibaggerMetric[];
+}
+
+export interface MultibaggerThesisItem {
+  code: string;
+  status: "ok" | "warning" | "break" | "na";
+  text: string;
+}
+
+export interface MultibaggerRow {
+  rank?: number;
+  symbol: string;
+  company_name: string;
+  sector: string;
+  industry: string | null;
+  price: number;
+  market_cap_cr: number | null;
+  score: number;
+  tier: "A" | "B" | "C" | "D";
+  tier_label: string;
+  capped_by_weak_layer: boolean;
+  weak_layer: MultibaggerLayerKey | null;
+  timing: MultibaggerTiming;
+  timing_label: string;
+  timing_reason: string;
+  coverage_pct: number;
+  layers: Record<MultibaggerLayerKey, MultibaggerLayer>;
+  qualifies: string[];
+  red_flags: string[];
+  data_gaps: string[];
+  vcp_status: string | null;
+  pivot: number | null;
+  distance_to_52w_high_pct: number | null;
+  reverse_dcf: { implied_growth_pct: number | null; delivered_growth_pct: number | null };
+  key: { rev_cagr_pct: number | null; pat_cagr_pct: number | null; roce_pct: number | null; de: number | null };
+  thesis_check: MultibaggerThesisItem[];
+}
+
+export interface MultibaggerExcluded {
+  symbol: string;
+  company_name: string;
+  sector?: string;
+  price?: number;
+  market_cap_cr?: number | null;
+  code: string;
+  detail: string;
+}
+
+export interface MultibaggerInsufficient {
+  symbol: string;
+  company_name: string;
+  sector?: string;
+  stage?: "k0" | "coverage" | "fetch";
+  reason: string;
+  data_gaps: string[];
+}
+
+export interface MultibaggerResult {
+  available: boolean;
+  universe: ScanUniverse;
+  as_of: string;
+  generated_at: string;
+  demo: boolean;
+  funnel: {
+    universe_count: number; after_size_bucket: number; after_prefilter: number; deep_pass: number;
+    not_deep_passed: number; passed_kill_switches: number; tiered: number; insufficient: number;
+  };
+  eliminated_by: Record<string, number>;
+  weights: Record<MultibaggerLayerKey, number>;
+  rules: string[];
+  notes: string[];
+  disclaimer: string;
+  sectors: { sector: string; rank: number; count: number; score: number }[];
+  results: MultibaggerRow[];
+  excluded: MultibaggerExcluded[];
+  insufficient: MultibaggerInsufficient[];
+  snapshot?: { month: string; recorded: boolean; rows?: number; reason?: string; error?: string };
+}
+
+export type MultibaggerStockResult =
+  | (MultibaggerRow & { status: "scored"; notes: string[]; demo: boolean })
+  | (MultibaggerExcluded & { status: "excluded"; notes: string[]; demo: boolean })
+  | (MultibaggerInsufficient & { status: "insufficient"; notes: string[]; demo: boolean; price?: number });
+
+export interface MultibaggerStatus {
+  running: boolean;
+  job: "run" | "backtest" | null;
+  stage: string;
+  progress: number;
+  universe?: ScanUniverse;
+  started_at?: string;
+  finished_at?: string;
+  error?: string;
+  detail?: string;
+  reason?: string;
+}
+
+export interface MultibaggerHorizon {
+  cohorts: number;
+  mean_return?: number;
+  median_return?: number;
+  median_universe?: number;
+  median_excess?: number;
+  median_excess_high_cost?: number;
+  beat_universe_pct?: number;
+  median_excess_vs_nifty?: number | null;
+}
+
+export interface MultibaggerBacktest {
+  universe: ScanUniverse;
+  start: string;
+  verdict: "PASS" | "FAIL" | "INCONCLUSIVE";
+  role: "primary" | "secondary";
+  criteria: { name: string; threshold: string; value: number | string | null; pass: boolean }[];
+  survivorship_warning: string;
+  horizons: Record<"1y" | "2y" | "3y", MultibaggerHorizon>;
+  cohorts_total: number;
+  ic: { mean: number | null; positive_pct: number | null; months: number };
+  two_x: { cohort_rate_pct: number | null; universe_rate_pct: number | null; ratio: number | null };
+  quintiles: { quintile: number; mean_12m_return: number }[] | null;
+  stress: { "2018_h1_excess_24m": number | null; "2020_h1_excess_24m": number | null };
+  t_stat_jan_cohorts: number | null;
+  data_breaks_dropped: number;
+  costs: { round_trip_pct: number; sensitivity_pct: number };
+  symbols: number;
+  index_name: string;
+  hindsight: {
+    label: string;
+    rows: {
+      symbol: string; in_universe: boolean; first_top20_month?: string | null; months_in_top20?: number;
+      best_3y_run_start?: string | null; best_3y_multiple?: number | null;
+      avg_price_score_12m_before_run?: number | null; drawdown_over_50pct_after_entry?: boolean | null;
+    }[];
+  };
+  notes: string[];
+  run_at: string;
+  demo: boolean;
+}
+
+export interface MultibaggerLedgerHorizon {
+  ab: number | null; c: number | null; d: number | null; x: number | null;
+  ic: number | null; ab_minus_control: number | null; nifty: number | null;
+}
+
+export interface MultibaggerLedger {
+  universe: ScanUniverse;
+  started: string | null;
+  snapshots: { month: string; stocks: number; tiers: Record<string, number>; horizons: Record<"6m" | "12m" | "24m" | "36m", MultibaggerLedgerHorizon | null> }[];
+  decision: { verdict: "PENDING" | "PASS" | "FAIL"; graded_24m: number; text: string; median_ab_minus_control_24m?: number | null; mean_ic_24m?: number | null };
+}
