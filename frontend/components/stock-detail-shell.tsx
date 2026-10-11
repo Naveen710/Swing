@@ -485,13 +485,13 @@ export function StockDetailShell({ symbol }: { symbol: string }) {
 
         /* ── Hero ── */
         .sd-hero { display:grid; grid-template-columns:1fr auto; gap:24px; align-items:start; margin-bottom:24px; }
-        .sd-company { font-family:var(--font-space-grotesk),sans-serif; font-size:clamp(1.5rem,3.5vw,2.4rem); margin:8px 0 12px; line-height:1.15; }
+        .sd-company { font-family:var(--font-display),sans-serif; font-size:clamp(1.5rem,3.5vw,2.4rem); margin:8px 0 12px; line-height:1.15; }
         .sd-symbol-chip { display:inline-block; background:var(--accent-soft); color:var(--accent); font-weight:700; font-size:0.9rem; padding:4px 14px; border-radius:999px; }
 
         /* ── Signal card ── */
         .sd-signal-card {
-          background: linear-gradient(140deg,rgba(255,122,0,0.1),rgba(255,255,255,0.7)),var(--panel);
-          border:1px solid rgba(255,122,0,0.25); border-radius:22px; padding:18px 22px;
+          background: linear-gradient(140deg,rgba(var(--accent-rgb),0.1),rgba(255,255,255,0.7)),var(--panel);
+          border:1px solid rgba(var(--accent-rgb),0.25); border-radius:22px; padding:18px 22px;
           min-width:320px; max-width:420px; box-shadow:var(--shadow);
         }
         .sd-sc-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
@@ -499,8 +499,8 @@ export function StockDetailShell({ symbol }: { symbol: string }) {
         .sd-conf { font-size:0.9rem; font-weight:700; color:var(--accent); }
         .sd-sc-prices { display:grid; grid-template-columns:1fr auto 1fr auto 1fr; align-items:center; gap:6px; margin-bottom:14px; }
         .sd-sc-price { display:flex; flex-direction:column; min-width:0; }
-        .sd-sc-lbl { font-size:0.72rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); }
-        .sd-sc-val { font-size:1.1rem; font-weight:700; font-family:var(--font-space-grotesk),sans-serif; white-space:nowrap; }
+        .sd-sc-lbl { font-size:0.72rem;  color:var(--muted); }
+        .sd-sc-val { font-size:1.1rem; font-weight:700; font-family:var(--font-display),sans-serif; white-space:nowrap; }
         .sd-sc-val--sl  { color:var(--red); }
         .sd-sc-val--tgt { color:var(--green); }
         .sd-sc-sub { font-size:0.72rem; color:var(--muted); }
@@ -509,15 +509,15 @@ export function StockDetailShell({ symbol }: { symbol: string }) {
         .sd-sc-actions { display:flex; gap:8px; margin-top:14px; }
         .sd-notice { font-size:0.8rem; color:var(--accent); margin:8px 0 0; }
         .sd-flags { display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
-        .sd-flag { font-size:0.88rem; font-weight:600; color:var(--red); background:rgba(185,75,81,0.07); border:1px solid rgba(185,75,81,0.18); border-radius:12px; padding:8px 12px; }
-        .sd-flag--ok { color:var(--green); background:rgba(22,108,90,0.07); border-color:rgba(22,108,90,0.18); }
-        .sd-subtitle { font-size:0.95rem; margin:20px 0 12px; font-family:var(--font-space-grotesk),sans-serif; }
+        .sd-flag { font-size:0.88rem; font-weight:600; color:var(--red); background:rgba(var(--red-rgb),0.07); border:1px solid rgba(var(--red-rgb),0.18); border-radius:12px; padding:8px 12px; }
+        .sd-flag--ok { color:var(--green); background:rgba(var(--green-rgb),0.07); border-color:rgba(var(--green-rgb),0.18); }
+        .sd-subtitle { font-size:0.95rem; margin:20px 0 12px; font-family:var(--font-display),sans-serif; }
         .sd-chip { font-size:0.78rem; font-weight:600; padding:4px 10px; border-radius:999px; background:rgba(255,255,255,0.8); border:1px solid var(--line); }
 
         /* ── Panels ── */
         .sd-chart-panel { margin-bottom:20px; }
         .sd-panel { margin-bottom:20px; }
-        .sd-ptitle { font-size:1.1rem; font-family:var(--font-space-grotesk),sans-serif; margin:0 0 18px; }
+        .sd-ptitle { font-size:1.1rem; font-family:var(--font-display),sans-serif; margin:0 0 18px; }
         .sd-2col { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:20px; }
 
         /* ── Trade setup grid ── */
@@ -527,13 +527,13 @@ export function StockDetailShell({ symbol }: { symbol: string }) {
           border-radius:16px; padding:14px 16px; display:flex; flex-direction:column;
           gap:4px; min-width:0; overflow:hidden;
         }
-        .sd-setup-card--entry { border-color:rgba(54,89,162,0.25); background:rgba(54,89,162,0.05); }
-        .sd-setup-card--sl    { border-color:rgba(185,75,81,0.25); background:rgba(185,75,81,0.05); }
-        .sd-setup-card--tgt   { border-color:rgba(22,108,90,0.25); background:rgba(22,108,90,0.05); }
-        .sd-setup-card--ret   { border-color:rgba(22,108,90,0.2); background:rgba(22,108,90,0.04); }
-        .sd-setup-lbl { font-size:0.74rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); font-weight:500; }
+        .sd-setup-card--entry { border-color:rgba(var(--blue-rgb),0.25); background:rgba(var(--blue-rgb),0.05); }
+        .sd-setup-card--sl    { border-color:rgba(var(--red-rgb),0.25); background:rgba(var(--red-rgb),0.05); }
+        .sd-setup-card--tgt   { border-color:rgba(var(--green-rgb),0.25); background:rgba(var(--green-rgb),0.05); }
+        .sd-setup-card--ret   { border-color:rgba(var(--green-rgb),0.2); background:rgba(var(--green-rgb),0.04); }
+        .sd-setup-lbl { font-size:0.74rem;  color:var(--muted); font-weight:500; }
         .sd-setup-val {
-          font-size:clamp(1.1rem,2.2vw,1.5rem); font-family:var(--font-space-grotesk),sans-serif;
+          font-size:clamp(1.1rem,2.2vw,1.5rem); font-family:var(--font-display),sans-serif;
           font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
         }
         .sd-setup-card--entry .sd-setup-val { color:var(--blue); }
@@ -548,10 +548,10 @@ export function StockDetailShell({ symbol }: { symbol: string }) {
           background:rgba(255,255,255,0.58); border:1px solid var(--line);
           border-radius:14px; padding:12px 14px; min-width:0; overflow:hidden;
         }
-        .sd-ind-lbl { display:block; font-size:0.72rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:5px; }
+        .sd-ind-lbl { display:block; font-size:0.72rem;  color:var(--muted); margin-bottom:5px; }
         .sd-ind-val {
           display:block; font-size:clamp(0.95rem,1.8vw,1.15rem);
-          font-weight:700; font-family:var(--font-space-grotesk),sans-serif;
+          font-weight:700; font-family:var(--font-display),sans-serif;
           white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
         }
         .sd-ind-sub { display:block; font-size:0.74rem; margin-top:3px; }
@@ -564,19 +564,19 @@ export function StockDetailShell({ symbol }: { symbol: string }) {
         .sd-rsi-labels { display:flex; justify-content:space-between; font-size:0.72rem; color:var(--muted); margin-bottom:6px; }
         .sd-rsi-zone-lbl { color:var(--green); font-weight:600; }
         .sd-rsi-track { position:relative; height:10px; background:var(--bg-deep); border-radius:5px; overflow:visible; }
-        .sd-rsi-zone  { position:absolute; left:55%; width:20%; height:100%; background:rgba(22,108,90,0.2); border-radius:5px; }
-        .sd-rsi-needle{ position:absolute; top:-5px; width:20px; height:20px; background:var(--accent); border-radius:50%; transform:translateX(-50%); border:3px solid white; box-shadow:0 2px 8px rgba(255,122,0,.35); }
+        .sd-rsi-zone  { position:absolute; left:55%; width:20%; height:100%; background:rgba(var(--green-rgb),0.2); border-radius:5px; }
+        .sd-rsi-needle{ position:absolute; top:-5px; width:20px; height:20px; background:var(--accent); border-radius:50%; transform:translateX(-50%); border:3px solid white; box-shadow:0 2px 8px rgba(var(--accent-rgb),.35); }
 
         /* ── Relative strength ── */
         .sd-rs-layout { display:grid; grid-template-columns:180px 1fr; gap:28px; align-items:start; }
         .sd-rs-score-box { display:flex; flex-direction:column; gap:4px; }
-        .sd-big-num { font-size:clamp(2rem,4vw,3rem); font-family:var(--font-space-grotesk),sans-serif; font-weight:700; line-height:1; }
+        .sd-big-num { font-size:clamp(2rem,4vw,3rem); font-family:var(--font-display),sans-serif; font-weight:700; line-height:1; }
         .sd-big-of  { font-size:1.2rem; color:var(--muted); font-weight:400; }
         .sd-bar-track { height:7px; background:var(--bg-deep); border-radius:4px; overflow:hidden; margin-top:6px; }
-        .sd-bar-fill  { height:100%; background:linear-gradient(90deg,#f16800,#ff9a2f); border-radius:4px; transition:width .5s ease; }
+        .sd-bar-fill  { height:100%; background:var(--accent-grad); border-radius:4px; transition:width .5s ease; }
         .sd-rs-periods { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
         .sd-rs-period  { background:rgba(255,255,255,0.58); border:1px solid var(--line); border-radius:14px; padding:12px 14px; }
-        .sd-rs-period-lbl { display:block; font-size:0.74rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); font-weight:600; margin-bottom:8px; }
+        .sd-rs-period-lbl { display:block; font-size:0.74rem;  color:var(--muted); font-weight:600; margin-bottom:8px; }
         .sd-rs-tbl { width:100%; border-collapse:collapse; font-size:0.86rem; }
         .sd-rs-tbl td { padding:4px 0; border-bottom:1px solid var(--line); }
         .sd-rs-tbl tr:last-child td { border-bottom:none; font-weight:600; }
@@ -588,11 +588,11 @@ export function StockDetailShell({ symbol }: { symbol: string }) {
 
         /* ── Badges ── */
         .sd-badge { display:inline-block; font-size:0.85rem; font-weight:600; padding:5px 14px; border-radius:999px; }
-        .sd-badge--pass { background:rgba(22,108,90,0.1); color:var(--green); }
-        .sd-badge--warn { background:rgba(180,120,0,0.1); color:#8a5c00; }
-        .sd-event--low     { background:rgba(22,108,90,0.1); color:var(--green); }
-        .sd-event--medium  { background:rgba(180,120,0,0.1); color:#8a5c00; }
-        .sd-event--high    { background:rgba(185,75,81,0.1); color:var(--red); }
+        .sd-badge--pass { background:rgba(var(--green-rgb),0.1); color:var(--green); }
+        .sd-badge--warn { background:rgba(var(--warn-rgb),0.1); color:var(--warn-ink); }
+        .sd-event--low     { background:rgba(var(--green-rgb),0.1); color:var(--green); }
+        .sd-event--medium  { background:rgba(var(--warn-rgb),0.1); color:var(--warn-ink); }
+        .sd-event--high    { background:rgba(var(--red-rgb),0.1); color:var(--red); }
         .sd-event--unknown { background:var(--bg-deep); color:var(--muted); }
 
         /* ── Sector ── */
@@ -600,7 +600,7 @@ export function StockDetailShell({ symbol }: { symbol: string }) {
 
         /* ── Backtest hero ── */
         .sd-bt-hero { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
-        .sd-bt-main { background:rgba(255,122,0,0.05); border:1px solid rgba(255,122,0,0.18); border-radius:16px; padding:16px 18px; display:flex; flex-direction:column; gap:4px; }
+        .sd-bt-main { background:rgba(var(--accent-rgb),0.05); border:1px solid rgba(var(--accent-rgb),0.18); border-radius:16px; padding:16px 18px; display:flex; flex-direction:column; gap:4px; }
 
         /* ── Source note ── */
         .sd-source-note { font-size:0.76rem; color:var(--muted); margin:10px 0 0; }
@@ -609,7 +609,7 @@ export function StockDetailShell({ symbol }: { symbol: string }) {
         .sd-rationale { color:var(--muted); line-height:1.75; font-size:0.92rem; max-width:80ch; }
 
         /* ── Shared helpers ── */
-        .sd-stat-lbl { display:block; font-size:0.74rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); font-weight:500; margin-bottom:4px; }
+        .sd-stat-lbl { display:block; font-size:0.74rem;  color:var(--muted); font-weight:500; margin-bottom:4px; }
         .sd-stat-sub { font-size:0.78rem; color:var(--muted); margin-top:3px; }
         .sd-green { color:var(--green); }
         .sd-red   { color:var(--red); }

@@ -520,15 +520,15 @@ export function JournalShell() {
 
       <style>{`
         .jr-head { display:grid; grid-template-columns:1fr 320px; gap:24px; align-items:start; margin-bottom:20px; }
-        .jr-title { font-family:var(--font-space-grotesk),sans-serif; font-size:clamp(1.6rem,3.5vw,2.4rem); margin:8px 0 10px; line-height:1.1; }
+        .jr-title { font-family:var(--font-display),sans-serif; font-size:clamp(1.6rem,3.5vw,2.4rem); margin:8px 0 10px; line-height:1.1; }
         .jr-capital { background:var(--panel); border:1px solid var(--line); border-radius:20px; padding:16px; box-shadow:var(--shadow); }
         .jr-io { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
         .jr-hint { font-size:0.76rem; color:var(--muted); margin:8px 0 0; }
         .jr-msg { background:var(--accent-soft); color:var(--accent); border-radius:12px; padding:8px 14px; font-size:0.88rem; cursor:pointer; }
         .jr-stats { display:grid; grid-template-columns:repeat(6,1fr); gap:12px; margin-bottom:20px; }
         .jr-stat { background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:14px 16px; min-width:0; }
-        .jr-stat-l { display:block; font-size:0.72rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:5px; }
-        .jr-stat strong { font-family:var(--font-space-grotesk),sans-serif; font-size:1.3rem; white-space:nowrap; }
+        .jr-stat-l { display:block; font-size:0.72rem;  color:var(--muted); margin-bottom:5px; }
+        .jr-stat strong { font-family:var(--font-display),sans-serif; font-size:1.3rem; white-space:nowrap; }
         .jr-stat-sub { display:block; font-size:0.74rem; color:var(--muted); margin-top:3px; }
         .jr-panel { margin-bottom:20px; }
         .jr-panel h2 { font-size:1.15rem; }
@@ -545,7 +545,7 @@ export function JournalShell() {
         .jr-exit-msg { font-size:0.82rem; margin:4px 0; line-height:1.4; }
         .jr-exit .mini-btn { margin-top:6px; }
         .jr-risk-top { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:10px; }
-        .jr-risk-top strong { font-family:var(--font-space-grotesk),sans-serif; font-size:1.25rem; }
+        .jr-risk-top strong { font-family:var(--font-display),sans-serif; font-size:1.25rem; }
         .jr-risk-note { font-size:0.85rem; margin:0 0 12px; }
         .jr-add { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; padding:16px; border:1px dashed var(--line); border-radius:16px; margin-bottom:16px; background:rgba(255,255,255,0.45); }
         @media (max-width:960px) {

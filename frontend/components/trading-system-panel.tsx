@@ -590,15 +590,15 @@ export function TradingSystemPanel() {
         .ts-portfolio { color:var(--muted); }
         .ts-prog-outer { margin-bottom:14px; }
         .ts-prog-track { height:6px; background:var(--bg-deep); border-radius:3px; overflow:hidden; margin-bottom:6px; }
-        .ts-prog-fill { height:100%; background:linear-gradient(90deg,#f16800,#ff9a2f); border-radius:3px; transition:width .4s ease; }
+        .ts-prog-fill { height:100%; background:var(--accent-grad); border-radius:3px; transition:width .4s ease; }
         .ts-prog-text { font-size:0.82rem; color:var(--muted); }
         .ts-notice { color:var(--muted); font-size:0.88rem; margin:0 0 14px; }
         .ts-error { color:var(--red); font-size:0.88rem; margin:0 0 14px; }
         .ts-summary { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px; }
         .ts-stat { background:rgba(255,255,255,0.58); border:1px solid var(--line); border-radius:16px; padding:14px 16px; }
-        .ts-stat--g { background:rgba(22,108,90,0.06); border-color:rgba(22,108,90,0.18); }
-        .ts-stat-l { display:block; font-size:0.76rem; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; margin-bottom:5px; }
-        .ts-stat strong { font-size:1.3rem; font-family:var(--font-space-grotesk),sans-serif; }
+        .ts-stat--g { background:rgba(var(--green-rgb),0.06); border-color:rgba(var(--green-rgb),0.18); }
+        .ts-stat-l { display:block; font-size:0.76rem; color:var(--muted);  margin-bottom:5px; }
+        .ts-stat strong { font-size:1.3rem; font-family:var(--font-display),sans-serif; }
         .ts-stat--g strong { color:var(--green); }
         .ts-stat-sub { display:block; font-size:0.76rem; color:var(--muted); margin-top:3px; }
         .ts-backup td { opacity:0.62; }
@@ -609,27 +609,27 @@ export function TradingSystemPanel() {
         .ts-backup td:last-child { opacity:1; }
         .ts-tabs { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:18px; }
         .ts-tab { padding:8px 18px; border-radius:999px; border:1px solid var(--line); background:rgba(255,255,255,0.55); color:var(--muted); font-size:0.88rem; font-weight:500; cursor:pointer; }
-        .ts-tab:hover { border-color:rgba(241,104,0,0.28); color:var(--text); }
+        .ts-tab:hover { border-color:rgba(var(--accent-rgb),0.28); color:var(--text); }
         .ts-export { margin-left:auto; align-self:center; }
-        .ts-tab--on { background:linear-gradient(135deg,#f16800,#ff9a2f); color:#fff7ef; border-color:transparent; }
+        .ts-tab--on { background:var(--accent-grad); color:var(--on-accent); border-color:transparent; }
         .ts-fade { animation: ts-in 180ms ease; }
         @keyframes ts-in { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:translateY(0)} }
         .ts-tbl { width:100%; border-collapse:collapse; font-size:0.87rem; }
-        .ts-tbl th { color:var(--muted); font-size:0.74rem; text-transform:uppercase; letter-spacing:.08em; padding:10px; border-bottom:1px solid var(--line); text-align:left; font-weight:500; white-space:nowrap; }
+        .ts-tbl th { color:var(--muted); font-size:0.74rem;  padding:10px; border-bottom:1px solid var(--line); text-align:left; font-weight:500; white-space:nowrap; }
         .ts-tbl td { padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
         .ts-tbl tr:last-child td { border-bottom:none; }
-        .ts-top td { background:rgba(255,122,0,0.04); }
+        .ts-top td { background:rgba(var(--accent-rgb),0.04); }
         .ts-actions { display:flex; flex-direction:column; gap:6px; }
         .ts-pb-row { display:flex; align-items:center; gap:6px; font-size:0.85rem; }
         .ts-pb { flex:1; height:5px; background:var(--bg-deep); border-radius:3px; min-width:50px; overflow:hidden; }
-        .ts-pb-fill { height:100%; background:linear-gradient(90deg,#f16800,#ff9a2f); border-radius:3px; }
+        .ts-pb-fill { height:100%; background:var(--accent-grad); border-radius:3px; }
         .ts-intro { color:var(--muted); font-size:0.88rem; line-height:1.6; margin:0 0 16px; }
         .ts-sb { background:rgba(255,255,255,0.52); border:1px solid var(--line); border-radius:16px; padding:14px 16px; margin-bottom:12px; }
         .ts-sh { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
         .ts-st { font-weight:600; font-size:0.94rem; }
         .ts-badge { font-size:0.74rem; font-weight:600; padding:3px 10px; border-radius:999px; }
-        .ts-badge--green { background:rgba(22,108,90,0.1); color:var(--green); }
-        .ts-badge--amber { background:rgba(180,120,0,0.1); color:#8a5c00; }
+        .ts-badge--green { background:rgba(var(--green-rgb),0.1); color:var(--green); }
+        .ts-badge--amber { background:rgba(var(--warn-rgb),0.1); color:var(--warn-ink); }
         .ts-rr { display:flex; gap:10px; padding:7px 0; border-bottom:1px solid var(--line); }
         .ts-rr:last-child { border-bottom:none; padding-bottom:0; }
         .ts-rr-pad { padding:12px 14px; }
@@ -637,7 +637,7 @@ export function TradingSystemPanel() {
         .ts-rm { font-size:0.9rem; font-weight:500; }
         .ts-rs { font-size:0.82rem; color:var(--muted); margin-top:2px; }
         .ts-rb { margin-bottom:16px; }
-        .ts-rt { font-size:0.78rem; font-weight:600; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); margin:0 0 8px; }
+        .ts-rt { font-size:0.78rem; font-weight:600;  color:var(--muted); margin:0 0 8px; }
         .ts-rr-wrap { background:rgba(255,255,255,0.52); border:1px solid var(--line); border-radius:16px; overflow:hidden; }
         @media (max-width:960px) {
           .ts-summary { grid-template-columns:1fr 1fr; }

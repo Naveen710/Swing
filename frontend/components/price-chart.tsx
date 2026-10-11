@@ -40,14 +40,14 @@ export function PriceChart({
       >
         <defs>
           <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="rgba(255, 122, 0, 0.35)" />
-            <stop offset="100%" stopColor="rgba(255, 122, 0, 0.02)" />
+            <stop offset="0%" stopColor="rgba(51, 70, 184, 0.28)" />
+            <stop offset="100%" stopColor="rgba(51, 70, 184, 0.02)" />
           </linearGradient>
         </defs>
 
         <polyline
           fill="none"
-          stroke="#ff7a00"
+          stroke="#3346B8"
           strokeWidth="4"
           points={points}
           strokeLinejoin="round"
@@ -60,21 +60,21 @@ export function PriceChart({
               value={signal.entry_price}
               minPrice={minPrice}
               maxPrice={maxPrice}
-              color="#7cffcb"
+              color="#18223B"
               label="Entry"
             />
             <ReferenceLine
               value={signal.stop_loss}
               minPrice={minPrice}
               maxPrice={maxPrice}
-              color="#ff6b6b"
+              color="#C23A4B"
               label="Stop"
             />
             <ReferenceLine
               value={signal.target_price}
               minPrice={minPrice}
               maxPrice={maxPrice}
-              color="#7fb3ff"
+              color="#0F8A5F"
               label="Target"
             />
           </>
@@ -84,8 +84,8 @@ export function PriceChart({
           cx={WIDTH}
           cy={HEIGHT - ((latestClose - minPrice) / Math.max(maxPrice - minPrice, 1)) * HEIGHT}
           r="6"
-          fill="#fff6ea"
-          stroke="#ff7a00"
+          fill="#FFFFFF"
+          stroke="#3346B8"
           strokeWidth="3"
         />
       </svg>

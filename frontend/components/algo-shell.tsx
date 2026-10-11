@@ -234,21 +234,21 @@ export function AlgoShell() {
 
       <style>{`
         .al-head { display:grid; grid-template-columns:1fr 380px; gap:24px; align-items:start; margin-bottom:20px; }
-        .al-title { font-family:var(--font-space-grotesk),sans-serif; font-size:clamp(1.5rem,3.2vw,2.3rem); line-height:1.1; margin:8px 0 12px; }
+        .al-title { font-family:var(--font-display),sans-serif; font-size:clamp(1.5rem,3.2vw,2.3rem); line-height:1.1; margin:8px 0 12px; }
         .al-layers { margin:0; padding-left:20px; line-height:1.7; color:var(--muted); font-size:0.9rem; }
         .al-layers b { color:var(--text); }
         .al-controls { display:grid; gap:12px; }
         .al-controls textarea { width:100%; border-radius:12px; border:1px solid var(--line); padding:8px 12px; font:inherit; font-size:0.86rem; resize:vertical; background:rgba(255,255,255,0.8); }
-        .al-streak { border-radius:14px; padding:10px 16px; margin-bottom:16px; background:rgba(214,150,0,0.1); border:1px solid rgba(214,150,0,0.3); font-size:0.9rem; }
-        .al-streak--pause { background:rgba(185,75,81,0.08); border-color:rgba(185,75,81,0.3); }
+        .al-streak { border-radius:14px; padding:10px 16px; margin-bottom:16px; background:rgba(var(--warn-rgb),0.1); border:1px solid rgba(var(--warn-rgb),0.3); font-size:0.9rem; }
+        .al-streak--pause { background:rgba(var(--red-rgb),0.08); border-color:rgba(var(--red-rgb),0.3); }
         .al-regime { display:grid; grid-template-columns:260px 1fr; gap:18px; align-items:center; border-radius:22px; padding:18px 20px; margin-bottom:16px; border:1px solid var(--line); box-shadow:var(--shadow); }
-        .al-regime--on { background:linear-gradient(135deg,rgba(22,108,90,0.1),rgba(255,255,255,0.75)); border-color:rgba(22,108,90,0.3); }
-        .al-regime--off { background:linear-gradient(135deg,rgba(185,75,81,0.1),rgba(255,255,255,0.75)); border-color:rgba(185,75,81,0.3); }
+        .al-regime--on { background:linear-gradient(135deg,rgba(var(--green-rgb),0.1),rgba(255,255,255,0.75)); border-color:rgba(var(--green-rgb),0.3); }
+        .al-regime--off { background:linear-gradient(135deg,rgba(var(--red-rgb),0.1),rgba(255,255,255,0.75)); border-color:rgba(var(--red-rgb),0.3); }
         .al-regime-status { display:flex; gap:14px; align-items:center; }
         .al-regime-light { width:22px; height:22px; border-radius:50%; flex:none; }
-        .al-regime--on .al-regime-light { background:#2f8a64; box-shadow:0 0 0 6px rgba(47,138,100,0.18); }
-        .al-regime--off .al-regime-light { background:#b94b51; box-shadow:0 0 0 6px rgba(185,75,81,0.18); }
-        .al-regime-status strong { display:block; font-family:var(--font-space-grotesk),sans-serif; font-size:1.4rem; }
+        .al-regime--on .al-regime-light { background:var(--green); box-shadow:0 0 0 6px rgba(var(--green-rgb),0.18); }
+        .al-regime--off .al-regime-light { background:var(--red); box-shadow:0 0 0 6px rgba(var(--red-rgb),0.18); }
+        .al-regime-status strong { display:block; font-family:var(--font-display),sans-serif; font-size:1.4rem; }
         .al-regime-status span { font-size:0.8rem; color:var(--muted); }
         .al-checks { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
         .al-check { display:flex; gap:10px; align-items:flex-start; background:rgba(255,255,255,0.65); border:1px solid var(--line); border-radius:12px; padding:8px 12px; font-size:0.84rem; }
@@ -263,7 +263,7 @@ export function AlgoShell() {
         .al-funnel { display:grid; gap:8px; }
         .al-funnel-row { display:grid; grid-template-columns:minmax(220px,340px) 1fr 50px; gap:12px; align-items:center; font-size:0.86rem; }
         .al-funnel-track { height:12px; background:var(--bg-deep); border-radius:6px; overflow:hidden; }
-        .al-funnel-fill { height:100%; background:linear-gradient(90deg,#f16800,#ff9a2f); border-radius:6px; }
+        .al-funnel-fill { height:100%; background:var(--accent-grad); border-radius:6px; }
         .al-funnel-row b { text-align:right; }
         .al-small { font-size:0.8rem; margin:8px 0 0; }
         .al-notice { background:var(--accent-soft); color:var(--accent); border-radius:10px; padding:6px 12px; font-size:0.86rem; }
@@ -272,8 +272,8 @@ export function AlgoShell() {
         .al-tbl td { padding:9px 8px; vertical-align:top; }
         .al-points { display:flex; gap:3px; margin-top:4px; }
         .al-pt { width:18px; height:18px; border-radius:5px; display:grid; place-items:center; font-size:0.7rem; font-weight:700; }
-        .al-pt--ok { background:rgba(22,108,90,0.14); color:var(--green); }
-        .al-pt--bad { background:rgba(185,75,81,0.12); color:var(--red); }
+        .al-pt--ok { background:rgba(var(--green-rgb),0.14); color:var(--green); }
+        .al-pt--bad { background:rgba(var(--red-rgb),0.12); color:var(--red); }
         .al-pt--na { background:var(--bg-deep); color:var(--muted); }
         .al-actions { display:flex; flex-direction:column; gap:5px; }
         .al-exits ul { margin:0; padding-left:20px; line-height:1.7; font-size:0.9rem; }
@@ -487,18 +487,18 @@ function BacktestPanel({ universe }: { universe: ScanUniverse }) {
         .bt-controls .field { min-width:180px; }
         .bt-check { display:flex; gap:8px; align-items:center; font-size:0.85rem; padding-bottom:10px; }
         .bt-verdict { border-radius:14px; padding:12px 16px; margin-bottom:14px; font-size:0.9rem; line-height:1.55; }
-        .bt-verdict--ok { background:rgba(22,108,90,0.08); border:1px solid rgba(22,108,90,0.25); }
-        .bt-verdict--warn { background:rgba(214,150,0,0.09); border:1px solid rgba(214,150,0,0.3); }
+        .bt-verdict--ok { background:rgba(var(--green-rgb),0.08); border:1px solid rgba(var(--green-rgb),0.25); }
+        .bt-verdict--warn { background:rgba(var(--warn-rgb),0.09); border:1px solid rgba(var(--warn-rgb),0.3); }
         .bt-targets { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:16px; }
         .bt-targets > div { background:rgba(255,255,255,0.6); border:1px solid var(--line); border-radius:14px; padding:10px 12px; display:grid; gap:3px; align-content:start; }
         .bt-targets span { font-size:0.74rem; color:var(--muted); }
-        .bt-targets strong { font-family:var(--font-space-grotesk),sans-serif; font-size:1.25rem; }
+        .bt-targets strong { font-family:var(--font-display),sans-serif; font-size:1.25rem; }
         .bt-targets small { font-size:0.74rem; color:var(--muted); }
         .bt-targets .pill-tag { justify-self:start; }
         .bt-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
         .bt-grid h3 { font-size:0.95rem; margin:0 0 8px; }
-        .bt-stress td { background:rgba(214,150,0,0.07); }
-        .bt-stress small { color:#8a5c00; }
+        .bt-stress td { background:rgba(var(--warn-rgb),0.07); }
+        .bt-stress small { color:var(--warn-ink); }
         .bt-assume { margin-top:14px; font-size:0.85rem; }
         .bt-assume summary { cursor:pointer; font-weight:600; }
         .bt-assume ul { color:var(--muted); line-height:1.6; }
@@ -523,10 +523,10 @@ function Curve({ points }: { points: { date: string; equity: number; benchmark: 
   return (
     <div>
       <svg className="bt-curve" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Algo equity versus index">
-        <polyline points={line((p) => p.benchmark)} fill="none" stroke="#9a948c" strokeWidth="1.5" />
-        <polyline points={line((p) => p.equity)} fill="none" stroke="#f16800" strokeWidth="2.5" />
+        <polyline points={line((p) => p.benchmark)} fill="none" style={{ stroke: "var(--faint)" }} strokeWidth="1.5" />
+        <polyline points={line((p) => p.equity)} fill="none" style={{ stroke: "var(--accent)" }} strokeWidth="2.5" />
       </svg>
-      <div className="bt-legend"><span><i style={{ background: "#f16800" }} />Algo (growth of 100)</span><span><i style={{ background: "#9a948c" }} />Index</span><span>{points[0].date} → {points[points.length - 1].date}</span></div>
+      <div className="bt-legend"><span><i style={{ background: "var(--accent)" }} />Algo (growth of 100)</span><span><i style={{ background: "var(--faint)" }} />Index</span><span>{points[0].date} → {points[points.length - 1].date}</span></div>
     </div>
   );
 }

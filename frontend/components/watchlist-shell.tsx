@@ -232,7 +232,7 @@ export function WatchlistShell() {
 
       <style>{`
         .wl-head { display:grid; grid-template-columns:1fr auto; gap:24px; align-items:end; margin-bottom:20px; }
-        .wl-title { font-family:var(--font-space-grotesk),sans-serif; font-size:clamp(1.6rem,3.5vw,2.4rem); margin:8px 0 10px; line-height:1.1; }
+        .wl-title { font-family:var(--font-display),sans-serif; font-size:clamp(1.6rem,3.5vw,2.4rem); margin:8px 0 10px; line-height:1.1; }
         .wl-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:flex-end; }
         .wl-msg { background:var(--accent-soft); color:var(--accent); border-radius:12px; padding:8px 14px; font-size:0.88rem; cursor:pointer; }
         .wl-tbl { width:100%; border-collapse:collapse; font-size:0.87rem; }

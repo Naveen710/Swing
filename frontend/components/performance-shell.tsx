@@ -359,19 +359,19 @@ export function PerformanceShell() {
 
       <style>{`
         .pf-head { display:grid; grid-template-columns:1fr auto; gap:24px; align-items:end; margin-bottom:20px; }
-        .pf-title { font-family:var(--font-space-grotesk),sans-serif; font-size:clamp(1.6rem,3.5vw,2.4rem); margin:8px 0 10px; line-height:1.1; }
+        .pf-title { font-family:var(--font-display),sans-serif; font-size:clamp(1.6rem,3.5vw,2.4rem); margin:8px 0 10px; line-height:1.1; }
         .pf-msg { background:var(--accent-soft); color:var(--accent); border-radius:12px; padding:8px 14px; font-size:0.88rem; cursor:pointer; }
         .pf-panel { margin-bottom:20px; }
         .pf-panel h2 { font-size:1.2rem; }
         .pf-panel-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:16px; flex-wrap:wrap; }
-        .pf-warn { background:rgba(214,150,0,0.1); border:1px solid rgba(214,150,0,0.3); color:#7a5200; border-radius:12px; padding:10px 14px; font-size:0.86rem; margin-bottom:16px; }
+        .pf-warn { background:rgba(var(--warn-rgb),0.1); border:1px solid rgba(var(--warn-rgb),0.3); color:var(--warn-ink); border-radius:12px; padding:10px 14px; font-size:0.86rem; margin-bottom:16px; }
         .pf-stats { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:18px; }
         .pf-stat { background:rgba(255,255,255,0.6); border:1px solid var(--line); border-radius:16px; padding:12px 14px; min-width:0; }
-        .pf-stat-l { display:block; font-size:0.72rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:4px; }
-        .pf-stat strong { font-family:var(--font-space-grotesk),sans-serif; font-size:1.2rem; }
+        .pf-stat-l { display:block; font-size:0.72rem;  color:var(--muted); margin-bottom:4px; }
+        .pf-stat strong { font-family:var(--font-display),sans-serif; font-size:1.2rem; }
         .pf-stat-sub { display:block; font-size:0.74rem; color:var(--muted); margin-top:3px; }
         .pf-2col { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
-        .pf-h3 { font-size:0.98rem; font-family:var(--font-space-grotesk),sans-serif; margin:18px 0 8px; }
+        .pf-h3 { font-size:0.98rem; font-family:var(--font-display),sans-serif; margin:18px 0 8px; }
         .pf-note { font-size:0.84rem; margin:0 0 10px; }
         .pf-tbl { width:100%; border-collapse:collapse; font-size:0.86rem; }
         .pf-tbl th { font-size:0.72rem; padding:8px 10px; white-space:nowrap; }
@@ -382,17 +382,17 @@ export function PerformanceShell() {
         .pf-btn { padding:9px 18px; }
         .pf-progress { margin-bottom:16px; }
         .pf-track { height:6px; background:var(--bg-deep); border-radius:3px; overflow:hidden; margin-bottom:6px; }
-        .pf-fill { height:100%; background:linear-gradient(90deg,#f16800,#ff9a2f); transition:width .4s ease; }
+        .pf-fill { height:100%; background:var(--accent-grad); transition:width .4s ease; }
         .pf-months { display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); gap:6px; }
         .pf-month { border-radius:10px; padding:6px 8px; font-size:0.78rem; display:flex; flex-direction:column; }
         .pf-month strong { font-size:0.92rem; }
-        .pf-month--up { background:rgba(22,108,90,0.09); color:var(--green); }
-        .pf-month--down { background:rgba(185,75,81,0.09); color:var(--red); }
+        .pf-month--up { background:rgba(var(--green-rgb),0.09); color:var(--green); }
+        .pf-month--down { background:rgba(var(--red-rgb),0.09); color:var(--red); }
         .pf-details { margin-top:16px; font-size:0.86rem; color:var(--muted); }
         .pf-details summary { cursor:pointer; font-weight:600; color:var(--text); }
         .pf-verdict { border-radius:12px; padding:10px 14px; font-size:0.9rem; font-weight:600; margin-bottom:12px; }
-        .pf-verdict--ok { background:rgba(22,108,90,0.08); color:var(--green); }
-        .pf-verdict--warn { background:rgba(214,150,0,0.1); color:#7a5200; }
+        .pf-verdict--ok { background:rgba(var(--green-rgb),0.08); color:var(--green); }
+        .pf-verdict--warn { background:rgba(var(--warn-rgb),0.1); color:var(--warn-ink); }
         .pf-chart { width:100%; height:auto; background:rgba(255,255,255,0.5); border:1px solid var(--line); border-radius:16px; margin:4px 0 8px; }
         .pf-legend { display:flex; gap:16px; font-size:0.8rem; color:var(--muted); }
         .pf-legend i { display:inline-block; width:14px; height:3px; border-radius:2px; margin-right:6px; vertical-align:middle; }
@@ -447,15 +447,15 @@ function EquityChart({ points }: { points: PortfolioBacktestResult["equity_curve
   return (
     <div>
       <svg viewBox={`0 0 ${W} ${H}`} className="pf-chart" role="img" aria-label="Equity curve of the system versus Nifty">
-        <line x1={P} x2={W - P} y1={y(points[0].equity)} y2={y(points[0].equity)} stroke="rgba(69,45,18,0.15)" strokeDasharray="4 4" />
-        <path d={line("benchmark")} fill="none" stroke="#9a8a7c" strokeWidth={1.5} />
-        <path d={line("equity")} fill="none" stroke="#f16800" strokeWidth={2.5} />
-        <text x={P} y={16} fontSize={11} fill="#7b6352">{lakh(max)}</text>
-        <text x={P} y={H - 8} fontSize={11} fill="#7b6352">{lakh(min)}</text>
-        <text x={W - P} y={H - 8} fontSize={11} fill="#7b6352" textAnchor="end">{points[points.length - 1].date}</text>
-        <text x={P + 70} y={H - 8} fontSize={11} fill="#7b6352">{points[0].date}</text>
+        <line x1={P} x2={W - P} y1={y(points[0].equity)} y2={y(points[0].equity)} style={{ stroke: "rgba(var(--ink-rgb),0.15)" }} strokeDasharray="4 4" />
+        <path d={line("benchmark")} fill="none" style={{ stroke: "var(--faint)" }} strokeWidth={1.5} />
+        <path d={line("equity")} fill="none" style={{ stroke: "var(--accent)" }} strokeWidth={2.5} />
+        <text x={P} y={16} fontSize={11} style={{ fill: "var(--muted)" }}>{lakh(max)}</text>
+        <text x={P} y={H - 8} fontSize={11} style={{ fill: "var(--muted)" }}>{lakh(min)}</text>
+        <text x={W - P} y={H - 8} fontSize={11} style={{ fill: "var(--muted)" }} textAnchor="end">{points[points.length - 1].date}</text>
+        <text x={P + 70} y={H - 8} fontSize={11} style={{ fill: "var(--muted)" }}>{points[0].date}</text>
       </svg>
-      <div className="pf-legend"><span><i style={{ background: "#f16800" }} />System</span><span><i style={{ background: "#9a8a7c" }} />Nifty buy &amp; hold (same capital)</span></div>
+      <div className="pf-legend"><span><i style={{ background: "var(--accent)" }} />System</span><span><i style={{ background: "var(--faint)" }} />Nifty buy &amp; hold (same capital)</span></div>
     </div>
   );
 }

@@ -364,40 +364,40 @@ export function ValuationShell({ symbol }: { symbol: string | null }) {
 
       <style>{`
         .vl-intro { display:grid; grid-template-columns:1fr 380px; gap:24px; align-items:end; margin-bottom:20px; }
-        .vl-title { font-family:var(--font-space-grotesk),sans-serif; font-size:clamp(1.5rem,3.2vw,2.3rem); line-height:1.1; margin:8px 0 10px; }
+        .vl-title { font-family:var(--font-display),sans-serif; font-size:clamp(1.5rem,3.2vw,2.3rem); line-height:1.1; margin:8px 0 10px; }
         .vl-search .ss { max-width:none; }
         .vl-loading { display:flex; flex-direction:column; align-items:center; gap:12px; padding:60px 0; }
         .vl-spinner { width:34px; height:34px; border:3px solid var(--line); border-top-color:var(--accent); border-radius:50%; animation:vl-spin .7s linear infinite; }
         @keyframes vl-spin { to { transform:rotate(360deg); } }
         .an-symbol { background:var(--accent-soft); color:var(--accent); font-weight:700; padding:2px 12px; border-radius:999px; }
         .vl-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:16px; }
-        .vl-company { font-family:var(--font-space-grotesk),sans-serif; font-size:1.6rem; margin:6px 0 8px; }
+        .vl-company { font-family:var(--font-display),sans-serif; font-size:1.6rem; margin:6px 0 8px; }
         .vl-meta { display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; }
         .vl-top { display:grid; grid-template-columns:1.4fr 1fr; gap:20px; margin-bottom:20px; }
         .vl-verdict { border-radius:24px; padding:20px 22px; border:1px solid var(--line); box-shadow:var(--shadow); background:var(--panel); }
-        .vl-verdict--under { background:linear-gradient(135deg,rgba(22,108,90,0.12),rgba(255,255,255,0.7)); border-color:rgba(22,108,90,0.3); }
-        .vl-verdict--fair { background:linear-gradient(135deg,rgba(192,138,18,0.12),rgba(255,255,255,0.7)); border-color:rgba(192,138,18,0.3); }
-        .vl-verdict--over { background:linear-gradient(135deg,rgba(185,75,81,0.12),rgba(255,255,255,0.7)); border-color:rgba(185,75,81,0.3); }
-        .vl-verdict-label { font-family:var(--font-space-grotesk),sans-serif; font-size:2rem; font-weight:700; }
-        .vl-verdict--under .vl-verdict-label { color:var(--green); } .vl-verdict--fair .vl-verdict-label { color:#8a5c00; } .vl-verdict--over .vl-verdict-label { color:var(--red); }
+        .vl-verdict--under { background:linear-gradient(135deg,rgba(var(--green-rgb),0.12),rgba(255,255,255,0.7)); border-color:rgba(var(--green-rgb),0.3); }
+        .vl-verdict--fair { background:linear-gradient(135deg,rgba(var(--warn-rgb),0.12),rgba(255,255,255,0.7)); border-color:rgba(var(--warn-rgb),0.3); }
+        .vl-verdict--over { background:linear-gradient(135deg,rgba(var(--red-rgb),0.12),rgba(255,255,255,0.7)); border-color:rgba(var(--red-rgb),0.3); }
+        .vl-verdict-label { font-family:var(--font-display),sans-serif; font-size:2rem; font-weight:700; }
+        .vl-verdict--under .vl-verdict-label { color:var(--green); } .vl-verdict--fair .vl-verdict-label { color:var(--warn-ink); } .vl-verdict--over .vl-verdict-label { color:var(--red); }
         .vl-verdict-nums { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:14px 0 10px; }
         .vl-verdict-nums span { display:block; font-size:0.74rem; color:var(--muted); margin-bottom:3px; }
-        .vl-verdict-nums strong { font-family:var(--font-space-grotesk),sans-serif; font-size:1.2rem; }
+        .vl-verdict-nums strong { font-family:var(--font-display),sans-serif; font-size:1.2rem; }
         .vl-verdict-note { font-size:0.84rem; color:var(--muted); margin:0 0 12px; }
         .vl-range { position:relative; height:34px; }
-        .vl-range-track { position:absolute; top:12px; left:0; right:0; height:8px; border-radius:4px; background:linear-gradient(90deg,rgba(185,75,81,0.35),rgba(192,138,18,0.35),rgba(22,108,90,0.35)); }
+        .vl-range-track { position:absolute; top:12px; left:0; right:0; height:8px; border-radius:4px; background:linear-gradient(90deg,rgba(var(--red-rgb),0.35),rgba(var(--warn-rgb),0.35),rgba(var(--green-rgb),0.35)); }
         .vl-range-mark { position:absolute; top:4px; width:2px; height:24px; background:var(--text); }
         .vl-range-mark span { position:absolute; top:24px; left:50%; transform:translateX(-50%); font-size:0.7rem; white-space:nowrap; color:var(--muted); }
         .vl-range-price { background:var(--accent); width:3px; }
         .vl-range-price span { color:var(--accent); font-weight:700; top:-14px; }
         .vl-reverse h3, .vl-panel h3 { margin:0 0 10px; font-size:1.08rem; }
         .vl-implied { display:flex; justify-content:space-between; align-items:baseline; padding:12px 14px; border-radius:14px; background:var(--accent-soft); margin-bottom:10px; }
-        .vl-implied strong { font-family:var(--font-space-grotesk),sans-serif; font-size:1.7rem; color:var(--accent); }
+        .vl-implied strong { font-family:var(--font-display),sans-serif; font-size:1.7rem; color:var(--accent); }
         .vl-compare { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px; }
         .vl-compare div { background:rgba(255,255,255,0.6); border:1px solid var(--line); border-radius:12px; padding:8px 12px; }
         .vl-compare span { display:block; font-size:0.74rem; color:var(--muted); }
         .vl-reverse-text { font-size:0.9rem; line-height:1.55; margin:0; }
-        .vl-warn { background:rgba(214,150,0,0.09); border:1px solid rgba(214,150,0,0.3); border-radius:14px; padding:6px 14px; margin-bottom:18px; font-size:0.86rem; }
+        .vl-warn { background:rgba(var(--warn-rgb),0.09); border:1px solid rgba(var(--warn-rgb),0.3); border-radius:14px; padding:6px 14px; margin-bottom:18px; font-size:0.86rem; }
         .vl-warn p { margin:6px 0; }
         .vl-panel { margin-bottom:20px; }
         .vl-2col .vl-panel { margin-bottom:0; }
@@ -411,7 +411,7 @@ export function ValuationShell({ symbol }: { symbol: string | null }) {
         .vl-tbl, .vl-bridge, .vl-sens { width:100%; border-collapse:collapse; font-size:0.86rem; }
         .vl-tbl th { font-size:0.72rem; padding:8px; white-space:nowrap; }
         .vl-tbl td { padding:7px 8px; white-space:nowrap; }
-        .vl-tv td { font-weight:600; background:rgba(241,104,0,0.05); }
+        .vl-tv td { font-weight:600; background:rgba(var(--accent-rgb),0.05); }
         .vl-bridge td { padding:7px 4px; border-bottom:1px solid var(--line); }
         .vl-bridge td:last-child { text-align:right; font-weight:600; white-space:nowrap; }
         .vl-bridge small { color:var(--muted); }
@@ -419,8 +419,8 @@ export function ValuationShell({ symbol }: { symbol: string | null }) {
         .vl-final td { font-size:1.05rem; color:var(--accent); border-bottom:none; }
         .vl-sens th, .vl-sens td { padding:7px 6px; text-align:center; border:1px solid var(--line); white-space:nowrap; }
         .vl-sens thead th, .vl-sens tbody th { background:var(--bg-deep); font-size:0.74rem; }
-        .vl-up { background:rgba(22,108,90,0.08); color:var(--green); }
-        .vl-down { background:rgba(185,75,81,0.06); color:var(--red); }
+        .vl-up { background:rgba(var(--green-rgb),0.08); color:var(--green); }
+        .vl-down { background:rgba(var(--red-rgb),0.06); color:var(--red); }
         .vl-centre { outline:2px solid var(--accent); outline-offset:-2px; font-weight:700; }
         .vl-small { font-size:0.8rem; margin:8px 0 0; }
         .vl-need { color:var(--text); line-height:1.55; }

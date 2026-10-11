@@ -180,8 +180,8 @@ export function QuantScreenPanel() {
         .qs-controls .field { min-width:170px; }
         .qs-run { padding:10px 22px; }
         .qs-verdict { border-radius:14px; padding:12px 16px; font-size:0.9rem; line-height:1.55; margin-bottom:14px; }
-        .qs-verdict--ok { background:rgba(22,108,90,0.08); border:1px solid rgba(22,108,90,0.25); }
-        .qs-verdict--warn { background:rgba(214,150,0,0.09); border:1px solid rgba(214,150,0,0.3); }
+        .qs-verdict--ok { background:rgba(var(--green-rgb),0.08); border:1px solid rgba(var(--green-rgb),0.25); }
+        .qs-verdict--warn { background:rgba(var(--warn-rgb),0.09); border:1px solid rgba(var(--warn-rgb),0.3); }
         .qs-val { display:grid; grid-template-columns:minmax(300px,1fr) 1.2fr; gap:18px; align-items:start; margin-bottom:18px; }
         .qs-stats { width:100%; border-collapse:collapse; font-size:0.87rem; }
         .qs-stats th, .qs-stats td { padding:7px 8px; border-bottom:1px solid var(--line); text-align:right; }
@@ -216,7 +216,7 @@ function fmt(v: number | null | undefined, unit: string) {
 function ZBar({ z }: { z: number | null }) {
   if (z === null) return <span className="table-subtext">—</span>;
   const width = (Math.min(Math.abs(z), 3) / 3) * 50;
-  const color = z >= 0 ? "#2f8a64" : "#b94b51";
+  const color = z >= 0 ? "var(--green)" : "var(--red)";
   return (
     <div className="qs-z" title={`z = ${z}`}>
       <div className="qs-z-track">
@@ -238,14 +238,14 @@ function Curve({ points }: { points: { date: string; strategy: number; universe:
   return (
     <div>
       <svg className="qs-curve" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Growth of 100: quant top picks vs universe vs Nifty">
-        <polyline points={line("benchmark")} fill="none" stroke="#9a948c" strokeWidth="1.5" />
-        <polyline points={line("universe")} fill="none" stroke="#3659a2" strokeWidth="1.5" strokeDasharray="4 3" />
-        <polyline points={line("strategy")} fill="none" stroke="#f16800" strokeWidth="2.5" />
+        <polyline points={line("benchmark")} fill="none" style={{ stroke: "var(--faint)" }} strokeWidth="1.5" />
+        <polyline points={line("universe")} fill="none" style={{ stroke: "var(--blue)" }} strokeWidth="1.5" strokeDasharray="4 3" />
+        <polyline points={line("strategy")} fill="none" style={{ stroke: "var(--accent)" }} strokeWidth="2.5" />
       </svg>
       <div className="qs-legend">
-        <span><i style={{ background: "#f16800" }} />Quant top picks</span>
-        <span><i style={{ background: "#3659a2" }} />All eligible stocks</span>
-        <span><i style={{ background: "#9a948c" }} />Nifty</span>
+        <span><i style={{ background: "var(--accent)" }} />Quant top picks</span>
+        <span><i style={{ background: "var(--blue)" }} />All eligible stocks</span>
+        <span><i style={{ background: "var(--faint)" }} />Nifty</span>
         <span>Growth of ₹100, {points[0]?.date} → {points[points.length - 1]?.date}</span>
       </div>
     </div>

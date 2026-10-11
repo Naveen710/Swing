@@ -1,22 +1,22 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Sans, Space_Grotesk } from "next/font/google";
+import { Bricolage_Grotesque, IBM_Plex_Sans } from "next/font/google";
 
 import "./globals.css";
 
 const bodyFont = IBM_Plex_Sans({
   subsets: ["latin"],
-  weight: ["400", "500", "600"]
+  weight: ["400", "500", "600", "700"]
 });
 
-const headingFont = Space_Grotesk({
+const displayFont = Bricolage_Grotesque({
   subsets: ["latin"],
-  weight: ["500", "700"],
-  variable: "--font-space-grotesk"
+  weight: ["500", "600", "700"],
+  variable: "--font-display"
 });
 
 export const metadata: Metadata = {
-  title: "NSE AI Swing Scanner",
-  description: "Systematic swing-trading scanner MVP for NSE stocks."
+  title: "NSE Swing",
+  description: "Swing-trading scanner, journal and research desk for NSE stocks."
 };
 
 export default function RootLayout({
@@ -25,7 +25,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${bodyFont.className} ${headingFont.variable}`}
+        className={`${bodyFont.className} ${displayFont.variable}`}
       >
         {children}
       </body>

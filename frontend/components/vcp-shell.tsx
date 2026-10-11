@@ -291,7 +291,7 @@ export function VcpShell() {
 
       <style>{`
         .vc-head { display:grid; grid-template-columns:1fr 320px; gap:24px; align-items:start; margin-bottom:18px; }
-        .vc-title { font-family:var(--font-space-grotesk),sans-serif; font-size:clamp(1.5rem,3.2vw,2.3rem); line-height:1.1; margin:8px 0 10px; }
+        .vc-title { font-family:var(--font-display),sans-serif; font-size:clamp(1.5rem,3.2vw,2.3rem); line-height:1.1; margin:8px 0 10px; }
         .vc-sub { max-width:72ch; line-height:1.6; margin:0; }
         .vc-controls { display:grid; gap:10px; }
         .vc-rules { margin-bottom:18px; }
@@ -304,23 +304,23 @@ export function VcpShell() {
         .vc-funnel { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
         .vc-funnel div { background:rgba(255,255,255,0.6); border:1px solid var(--line); border-radius:14px; padding:10px 14px; }
         .vc-funnel span { display:block; font-size:0.74rem; color:var(--muted); }
-        .vc-funnel strong { font-family:var(--font-space-grotesk),sans-serif; font-size:1.5rem; }
+        .vc-funnel strong { font-family:var(--font-display),sans-serif; font-size:1.5rem; }
         .vc-small { font-size:0.8rem; margin:10px 0 0; }
         .vc-filter { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
         .vc-tab { padding:7px 16px; border-radius:999px; border:1px solid var(--line); background:rgba(255,255,255,0.6); color:var(--muted); font:inherit; font-size:0.86rem; font-weight:600; cursor:pointer; }
-        .vc-tab:hover { color:var(--text); border-color:rgba(241,104,0,0.3); }
-        .vc-tab--on { background:linear-gradient(135deg,#f16800,#ff9a2f); color:#fff7ef; border-color:transparent; }
+        .vc-tab:hover { color:var(--text); border-color:rgba(var(--accent-rgb),0.3); }
+        .vc-tab--on { background:var(--accent-grad); color:var(--on-accent); border-color:transparent; }
         .vc-notice { background:var(--accent-soft); color:var(--accent); border-radius:10px; padding:6px 12px; font-size:0.86rem; }
         .vc-tbl { width:100%; border-collapse:collapse; font-size:0.86rem; }
         .vc-tbl th { font-size:0.72rem; padding:8px; white-space:nowrap; }
         .vc-tbl td { padding:9px 8px; vertical-align:top; }
         .vc-depths { display:flex; flex-direction:column; gap:3px; }
-        .vc-depth { display:block; min-width:42px; font-size:0.72rem; font-weight:600; color:#fff; background:linear-gradient(90deg,#f16800,#ff9a2f); border-radius:5px; padding:1px 6px; white-space:nowrap; }
+        .vc-depth { display:block; min-width:42px; font-size:0.72rem; font-weight:600; color:#fff; background:var(--accent-grad); border-radius:5px; padding:1px 6px; white-space:nowrap; }
         .vc-q { display:flex; gap:3px; margin-top:4px; flex-wrap:wrap; }
         .vc-mon-head { display:flex; justify-content:space-between; align-items:center; }
         .al-pt { width:18px; height:18px; border-radius:5px; display:grid; place-items:center; font-size:0.7rem; font-weight:700; }
-        .al-pt--ok { background:rgba(22,108,90,0.14); color:var(--green); }
-        .al-pt--bad { background:rgba(185,75,81,0.12); color:var(--red); }
+        .al-pt--ok { background:rgba(var(--green-rgb),0.14); color:var(--green); }
+        .al-pt--bad { background:rgba(var(--red-rgb),0.12); color:var(--red); }
         .al-pt--na { background:var(--bg-deep); color:var(--muted); }
         .al-actions { display:flex; flex-direction:column; gap:5px; }
         @media (max-width:960px) { .vc-head, .vc-rules-grid { grid-template-columns:1fr; } .vc-funnel { grid-template-columns:1fr 1fr; } }
