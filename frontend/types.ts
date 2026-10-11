@@ -589,3 +589,139 @@ export interface ValuationResponse {
   history: { year: number; revenue: number | null; net_income: number | null; operating_cash_flow: number | null; capex: number | null; free_cash_flow: number | null }[];
   valuation: ValuationResult;
 }
+
+export interface AlgoPoint { name: string; pass: boolean | null; detail: string }
+
+export interface AlgoTrade {
+  symbol: string;
+  company_name: string;
+  sector: string;
+  setup: "trend pullback" | "base breakout";
+  close: number;
+  stop: number;
+  risk_per_share: number;
+  risk_pct: number;
+  partial_target: number;
+  atr: number;
+  ema10: number;
+  rs_percentile: number;
+  sector_rank: number | null;
+  pct_from_52w_high: number;
+  avg_traded_value_cr: number;
+  score: number;
+  points: AlgoPoint[];
+  earnings_growth: { pass: boolean | null; method: string };
+  asm_gsm: boolean | null;
+  reason?: string;
+}
+
+export interface AlgoLiveResponse {
+  available: boolean;
+  as_of: string;
+  universe: string;
+  regime: { pass: boolean; index_name: string; checks: { name: string; pass: boolean | null; value: string }[] };
+  funnel: { layer: string; count: number }[];
+  longs_allowed: boolean;
+  top_sectors: string[];
+  trades: AlgoTrade[];
+  blocked_by_regime: AlgoTrade[];
+  near_misses: (Partial<AlgoTrade> & { symbol: string; reason: string })[];
+  excluded_by_you?: string[];
+  data_notes: string[];
+  rules: { partial_r: number; atr_stop_mult: number; time_stop_sessions: number; trail: string; min_points: number };
+}
+
+export interface AlgoStats {
+  trades: number;
+  win_rate: number | null;
+  expectancy_r: number | null;
+  profit_factor: number | null;
+  avg_win_r: number | null;
+  avg_loss_r: number | null;
+  pnl: number;
+}
+
+export interface AlgoBacktest {
+  available: boolean;
+  reason?: string;
+  start: string;
+  end: string;
+  run_at: string;
+  symbols_tested: number;
+  index_name: string;
+  overall: AlgoStats;
+  cagr_pct: number;
+  max_drawdown_pct: number;
+  benchmark_cagr_pct: number | null;
+  targets: { expectancy_r: number; profit_factor: number; min_trades: number };
+  checks: { expectancy_r: boolean; profit_factor: boolean; min_trades: boolean };
+  passes_all: boolean;
+  per_year: (AlgoStats & { year: number; return_pct: number | null })[];
+  positive_years: number;
+  years_with_trades: number;
+  by_setup: Record<string, AlgoStats>;
+  by_exit: Record<string, AlgoStats>;
+  regime_off_pct: number;
+  excluded_data_breaks: number;
+  cost_per_side_pct: number;
+  required_confirmations: number;
+  curve: { date: string; equity: number; benchmark: number | null }[];
+  recent_trades: { symbol: string; setup: string; entry_date: string; exit_date: string; entry: number; exit: number; r: number; reason: string; size_factor: number }[];
+  assumptions: string[];
+}
+
+export interface VcpResult {
+  symbol: string;
+  company_name: string;
+  sector: string;
+  status: "breakout today" | "breakout" | "near pivot" | "building" | "extended";
+  close: number;
+  pivot: number;
+  distance_to_pivot_pct: number;
+  entry: number;
+  stop: number;
+  risk_pct: number;
+  atr20: number;
+  breakout_volume_ratio: number | null;
+  ten_day_range_pct: number;
+  score: number;
+  score_max: number;
+  quality: Record<string, boolean>;
+  trend_template: { pass: boolean; checks: Record<string, boolean>; above_ma50: boolean; pct_above_52w_low: number | null; pct_below_52w_high: number | null };
+  vcp: {
+    contractions: number; depths_pct: number[]; durations_weeks: number[]; pivot: number; pivot_week: string;
+    base_start_week: string; base_weeks: number; up_down_volume: number | null; volume_dry_up: boolean; time_contracting: boolean; week_ending: string;
+  };
+}
+
+export interface VcpScanResponse {
+  available: boolean;
+  universe: string;
+  as_of: string;
+  week_ending: string | null;
+  counts: { loaded: number; trend_template: number; valid_vcp: number };
+  by_status: Record<string, number>;
+  eliminated_by: Record<string, number>;
+  results: VcpResult[];
+}
+
+export interface VcpMonitor {
+  symbol: string;
+  available: boolean;
+  reason?: string;
+  sessions?: number;
+  gain_pct?: number;
+  green_days?: number;
+  red_days?: number;
+  up_down_volume?: number | null;
+  follow_up_days?: number;
+  max_pullback_pct?: number;
+  shallow_limit_pct?: number;
+  avg_recovery_sessions?: number | null;
+  pullbacks_counted?: number;
+  slow_recoveries?: number;
+  signals?: Record<string, boolean | null>;
+  health?: "strong" | "mixed" | "weak";
+  score?: number;
+  applicable?: number;
+}

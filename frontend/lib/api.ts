@@ -1,5 +1,7 @@
 import {
   BacktestRunState,
+  AlgoBacktest,
+  AlgoLiveResponse,
   MarketRegimeSnapshot,
   PortfolioRiskResponse,
   SectorRotationResponse,
@@ -7,6 +9,8 @@ import {
   StockAnalysis,
   StockSearchResult,
   ValuationResponse,
+  VcpMonitor,
+  VcpScanResponse,
   PerformanceSummary,
   PortfolioBacktestResult,
   ScanUniverse,
@@ -130,4 +134,30 @@ export function getValuation(symbol: string, overrides: Record<string, string | 
   Object.entries(overrides).forEach(([k, v]) => { if (v !== null && v !== undefined && v !== "") params.set(k, String(v)); });
   const qs = params.toString();
   return request<ValuationResponse>(`/valuation/${encodeURIComponent(symbol)}${qs ? `?${qs}` : ""}`);
+}
+
+export function getAlgo(universe: ScanUniverse, exclude: string[], refresh = false): Promise<AlgoLiveResponse> {
+  const ex = exclude.length ? `&exclude=${encodeURIComponent(exclude.join(","))}` : "";
+  return request<AlgoLiveResponse>(`/algo?universe=${universe}${ex}${refresh ? "&refresh=true" : ""}`);
+}
+
+export function startAlgoBacktest(universe: ScanUniverse, start: string, confirmations: number, full: boolean) {
+  return request<{ started: boolean; state: { running: boolean; stage: string } }>(
+    `/algo/backtest?universe=${universe}&start=${start}&confirmations=${confirmations}&full=${full}`, { method: "POST" });
+}
+
+export function getAlgoBacktestStatus() {
+  return request<{ running: boolean; stage: string; progress?: number; error?: string }>("/algo/backtest/status");
+}
+
+export function getAlgoBacktest(universe: ScanUniverse): Promise<AlgoBacktest> {
+  return request<AlgoBacktest>(`/algo/backtest?universe=${universe}`);
+}
+
+export function getVcpScan(universe: ScanUniverse, refresh = false): Promise<VcpScanResponse> {
+  return request<VcpScanResponse>(`/vcp?universe=${universe}${refresh ? "&refresh=true" : ""}`);
+}
+
+export function getVcpMonitor(positions: { symbol: string; entry_date: string; entry_price: number }[]): Promise<VcpMonitor[]> {
+  return request<VcpMonitor[]>("/vcp/monitor", { method: "POST", body: JSON.stringify({ positions }) });
 }

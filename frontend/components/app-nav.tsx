@@ -16,6 +16,8 @@ export function AppNav() {
     { href: "/", label: "Scanner" },
     { href: "/watchlist", label: "Watchlist", count: watchlist.length },
     { href: "/journal", label: "Journal", count: open },
+    { href: "/algo", label: "Algo" },
+    { href: "/vcp", label: "VCP" },
     { href: "/valuation", label: "Valuation" },
     { href: "/performance", label: "Performance" },
   ];

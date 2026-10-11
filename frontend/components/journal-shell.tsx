@@ -299,8 +299,9 @@ export function JournalShell() {
                           return (
                             <>
                               <span className={`pill-tag ${tone}`}>{label}</span>
+                              {t.exit_profile === "curated" && <span className="pill-tag pill-tag--muted" style={{ marginLeft: 4 }}>Algo rules</span>}
                               <div className="jr-exit-msg">{a.message}</div>
-                              <div className="table-subtext">Last ₹{a.lastClose.toFixed(2)}{a.ema20 !== null && ` · 20 EMA ₹${a.ema20.toFixed(2)}`} · day {a.sessionsHeld}</div>
+                              <div className="table-subtext">Last ₹{a.lastClose.toFixed(2)}{a.ema20 !== null && ` · ${t.exit_profile === "curated" ? "10" : "20"} EMA ₹${a.ema20.toFixed(2)}`} · day {a.sessionsHeld}</div>
                               {(t.partials ?? []).length > 0 && <div className="table-subtext">Booked {(t.partials ?? []).map((p) => `${p.qty}@₹${p.price}`).join(", ")}</div>}
                               {a.action === "book_partial" && <button className="mini-btn mini-btn--primary" onClick={() => bookPartial(t, a)}>Book half</button>}
                               {a.action === "trail" && <button className="mini-btn mini-btn--primary" onClick={() => applyTrail(t, a)}>Raise stop to ₹{a.suggestedStop}</button>}

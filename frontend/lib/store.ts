@@ -47,6 +47,8 @@ export interface JournalTrade {
   /** Whether the final exit followed an exit-engine rule or was discretionary. */
   exit_discipline?: "rule" | "instinct";
   exit_rule?: string | null;
+  /** "curated" = the 5-layer Algo's exits (½ at 1.5R → breakeven, 10 EMA trail, 10-session time stop). */
+  exit_profile?: "standard" | "curated";
 }
 
 export interface WatchItem {
@@ -343,4 +345,15 @@ export function fmtINR(n: number) {
 }
 export function fmtPattern(p: string) {
   return p.split("_").map((w) => (w[0]?.toUpperCase() ?? "") + w.slice(1)).join(" ");
+}
+
+/** Consecutive losing closed trades, most recent first, for the Algo's sizing rule. */
+export function lossStreak(trades: JournalTrade[]): { streak: number; lastLossDate: string | null } {
+  const closed = trades.filter((t) => t.status === "closed").sort((a, b) => (b.exit_date ?? "").localeCompare(a.exit_date ?? ""));
+  let streak = 0;
+  for (const t of closed) {
+    if (closedMetrics(t).pnl < 0) streak += 1;
+    else break;
+  }
+  return { streak, lastLossDate: streak ? closed[0].exit_date ?? null : null };
 }
