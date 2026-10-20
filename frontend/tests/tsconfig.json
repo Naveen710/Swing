@@ -17,6 +17,7 @@
   "files": [
     "exits.test.ts",
     "store.test.ts",
-    "multibagger.test.ts"
+    "multibagger.test.ts",
+    "research.test.ts"
   ]
 }

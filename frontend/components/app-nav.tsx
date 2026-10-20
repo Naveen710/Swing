@@ -19,6 +19,7 @@ export function AppNav() {
     { href: "/algo", label: "Algo" },
     { href: "/vcp", label: "VCP" },
     { href: "/multibagger", label: "Multibagger" },
+    { href: "/research", label: "Research" },
     { href: "/valuation", label: "Valuation" },
     { href: "/performance", label: "Performance" },
   ];
