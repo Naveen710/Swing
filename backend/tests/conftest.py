@@ -13,7 +13,9 @@ os.environ.setdefault("UNIVERSE_PROVIDER", "bundled_csv")
 os.environ.setdefault("ALLOW_DEMO_FALLBACK", "1")
 os.environ.setdefault("ENABLE_EXTERNAL_OVERLAYS", "0")
 os.environ.setdefault("DATA_CACHE_DIR", tempfile.mkdtemp(prefix="swing-test-cache-"))
-os.environ["DATABASE_URL"] = ""          # never touch a real database from tests
+# Never touch a real database from tests. Set TEST_DATABASE_URL to run the suite against a
+# throwaway Postgres (e.g. to check production-dialect behaviour); otherwise SQLite in a temp dir.
+os.environ["DATABASE_URL"] = os.environ.get("TEST_DATABASE_URL", "")
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 

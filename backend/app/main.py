@@ -4,6 +4,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import router
+from app.research.api import public as research_public
+from app.research.api import router as research_router
 from app.config import settings
 
 
@@ -22,4 +24,6 @@ app.add_middleware(
 )
 
 app.include_router(router, prefix=settings.api_prefix)
+app.include_router(research_public, prefix=settings.api_prefix)
+app.include_router(research_router, prefix=settings.api_prefix)
 
