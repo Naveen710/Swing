@@ -57,6 +57,13 @@ services:
         value: https://naveen710-swing-web.onrender.com,http://localhost:3000
       - key: DATABASE_URL
         sync: false
+      # Research platform (/research). All optional; set the secret ones in the Render dashboard.
+      - key: RESEARCH_PASSWORD        # require sign-in for /api/research (strongly recommended)
+        sync: false
+      - key: RESEARCH_SECRET          # signs sign-in tokens; any long random string
+        sync: false
+      - key: RESEARCH_LLM_API_KEY     # optional Anthropic key for AI extraction/narration
+        sync: false
 
   - type: web
     name: naveen710-swing-web

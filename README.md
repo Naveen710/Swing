@@ -227,6 +227,54 @@ python -m app.jobs.run_portfolio_backtest --universe nifty500 --years 2
 4. Swap the SVG chart for TradingView or Lightweight Charts.
 5. Add richer company metadata for the full NSE universe so sector and market-cap filters stay accurate.
 
+## Research platform (`/research`)
+
+An evidence-first research and discovery workspace for Indian listed companies, separate from the swing scanner.
+Pages: dashboard, company explorer, company dossier, discovery queue, news & events, evidence viewer,
+watchlists, decision journal, data quality and settings. It is **read-only**: it never places orders, and
+it never tells you to buy anything.
+
+How it works:
+- **Data** comes from free sources first (NSE master list and announcements, Yahoo statements/prices,
+  RSS news) plus your own CSV/Excel/PDF imports. Every payload is archived with a SHA-256 hash and version;
+  failures and gaps are logged on the Data quality page and are never filled with invented numbers.
+- **Facts** are versioned: restatements keep the original and mark the newer one current.
+- **Research snapshots** are deterministic: Python computes every metric, accounting check, bear/base/bull
+  scenario and the seven separate dimensions (quality, growth, strength, valuation, governance, data
+  confidence, recognition gap) from a recorded input bundle, and `replay` reproduces the output hash exactly.
+  Status is `BLOCKED`, `REVIEW_REQUIRED` or `ELIGIBLE_FOR_RESEARCH`.
+- **AI is optional** and limited to extracting quoted statements from filings and narrating computed claims.
+  Every claim is typed Sourced / Computed / Inference and links to its evidence; unverifiable output is rejected.
+- **Sample companies** (symbols `SMP…`, marked "(sample)") are fictional fixtures for trying the workflow offline.
+
+Run locally:
+```bash
+cd backend && python -m app.research.cli seed            # fictional sample companies, offline
+python -m app.research.cli ingest RELIANCE               # one real company (needs network to NSE/Yahoo)
+python -m app.research.cli ingest-deep                   # the 20-company deep-research set
+python -m app.research.cli news                          # refresh RSS news
+python -m app.research.cli dossier SMPCABLE --md         # print a dossier
+python -m app.research.cli replay <snapshot_id>          # prove a snapshot is reproducible
+python -m app.research.cli verify app/research/verification/sample_cases.csv
+```
+Or open `/research` and press **Load sample companies**.
+
+Environment (API service, all optional):
+| Variable | Purpose |
+|---|---|
+| `RESEARCH_PASSWORD`, `RESEARCH_SECRET` | Require sign-in for all `/api/research` endpoints. Set these on any public deployment. |
+| `RESEARCH_LLM_API_KEY` (or `ANTHROPIC_API_KEY`), `RESEARCH_LLM_MODEL` | Enable AI extraction/narration (default model `claude-haiku-5-5`). |
+| `RESEARCH_SAMPLE_SYMBOLS` | Comma-separated deep-research set (default: 20 large/mid caps). |
+| `RESEARCH_NEWS_FEEDS` | Comma-separated RSS URLs. |
+
+Search uses SQLite FTS5 locally and falls back to `ILIKE` on Postgres. Backup/restore of watchlists, journal
+and preferences is on the Settings page. To refresh daily, add `python -m app.research.cli ingest-deep` to a cron job.
+
+Tests: `python -m pytest -q tests/test_research_*.py` (add `TEST_DATABASE_URL=postgresql://…` to run against a
+throwaway Postgres), `npm test` in `frontend/`, and the browser walkthrough
+`node frontend/e2e/research.e2e.mjs` against running servers (`E2E_BASE_URL`, `CHROMIUM_PATH` optional; needs
+`npm i -D playwright`).
+
 ## AI agent team (Claude Code)
 
 Open this repo in Claude Code and the agents in `.claude/agents/` are available:
