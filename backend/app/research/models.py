@@ -308,6 +308,19 @@ settings_kv = Table(
     Column("updated_at", DateTime(timezone=True)),
 )
 
+index_members = Table(
+    "rs_index_members", metadata,                            # which companies are in each market-cap segment
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("segment", String(10), nullable=False),           # large | mid | small
+    Column("index_name", String(60), nullable=False),        # e.g. NIFTY 100
+    Column("company_id", Integer, ForeignKey("rs_companies.id", ondelete="CASCADE"), nullable=False),
+    Column("symbol", String(40), nullable=False),
+    Column("source", String(30), nullable=False),            # niftyindices | bundled
+    Column("raw_source_id", Integer, ForeignKey("rs_raw_sources.id", ondelete="SET NULL")),
+    Column("as_of", DateTime(timezone=True)),
+    UniqueConstraint("segment", "company_id", name="uq_rs_index_member"),
+)
+
 schema_version = Table(
     "rs_schema_version", metadata,
     Column("version", Integer, primary_key=True),

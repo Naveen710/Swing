@@ -20,7 +20,7 @@ def seeded():
 
 def test_health_and_settings():
     h = c.get(f"{R}/health").json()
-    assert h["status"] == "ok" and h["database"]["schema"] == [1, 2] and h["ai_enabled"] is False
+    assert h["status"] == "ok" and h["database"]["schema"] == [1, 2, 3] and h["ai_enabled"] is False
     s = c.get(f"{R}/settings").json()
     assert s["sources"] and s["ai"]["enabled"] is False and len(s["deep_symbols"]) == 20
 

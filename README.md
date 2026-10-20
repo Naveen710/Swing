@@ -259,6 +259,23 @@ python -m app.research.cli verify app/research/verification/sample_cases.csv
 ```
 Or open `/research` and press **Load sample companies**.
 
+**Large / Mid / Small cap buttons.** The research dashboard has three buttons — Large cap (NIFTY 100), Mid cap
+(NIFTY Midcap 150) and Small cap (NIFTY Smallcap 250); together they are the NIFTY 500 (SEBI's size classes:
+top 100, 101–250, 251–500 by market cap). Pressing one downloads the current constituent list from NSE Indices
+(niftyindices.com, archived with its hash; falls back to the lists bundled in `backend/data/` if the download
+fails), then fetches every company in that list in the background and opens a sortable table of status, price,
+valuation, returns, growth and dimension scores. Companies refreshed in the last 24 hours are skipped
+("Fetch latest data" again, or `--force` on the CLI, to redo them). Filing PDFs are not downloaded for whole
+segments — open a company's dossier and press Refresh for that.
+```bash
+python -m app.research.cli lists             # just refresh the three constituent lists
+python -m app.research.cli segment mid       # fetch all Mid cap companies in the foreground
+python -m app.research.cli templates         # regenerate the per-segment verification templates
+```
+Verification templates are per segment: `app/research/verification/real_cases_{large,mid,small}_cap.csv`
+(FY revenue and net profit for every constituent, blank for you to fill from annual reports), also downloadable
+from each segment page. Upload a filled file on the Data quality page.
+
 Environment (API service, all optional):
 | Variable | Purpose |
 |---|---|

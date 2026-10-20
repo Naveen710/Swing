@@ -103,7 +103,7 @@ def freshness(conn, comp) -> dict:
 # ── companies / explorer ─────────────────────────────────────────────────────
 
 def search_companies(q: str | None = None, sector: str | None = None, scope: str = "all", status: str | None = None,
-                     coverage: str | None = None, limit: int = 50, offset: int = 0) -> dict:
+                     coverage: str | None = None, limit: int = 50, offset: int = 0, segment: str | None = None) -> dict:
     ensure_master()
     c, s = m.companies.c, m.securities.c
     snap = m.research_snapshots.c
@@ -134,6 +134,12 @@ def search_companies(q: str | None = None, sector: str | None = None, scope: str
         conds.append(latest.c.sid.is_not(None))
     if status:
         conds.append(m.research_snapshots.c.status == status)
+    if segment:
+        from app.research.segments import check_segment, ensure_segments
+
+        ensure_segments()
+        im = m.index_members.c
+        conds.append(c.id.in_(select(im.company_id).where(im.segment == check_segment(segment))))
     if coverage == "with_data":
         conds.append(facts.c.n > 0)
     elif coverage == "no_data":
@@ -684,3 +690,102 @@ def restore(data: dict) -> dict:
             conn.execute(m.settings_kv.delete().where(m.settings_kv.c.key == "preferences"))
             conn.execute(m.settings_kv.insert().values(key="preferences", value=data["preferences"], updated_at=now()))
     return {"restored": True, "watchlists": len(data.get("watchlists", [])), "decisions": len(data.get("decisions", [])), "skipped": skipped}
+
+
+# ── market-cap segments ──────────────────────────────────────────────────────
+
+SEGMENT_METRICS = ("market_cap", "pe", "pb", "roe", "roce", "revenue_growth", "profit_growth", "debt_equity", "ret_1y")
+
+
+def _segment_rows(conn, seg: str):
+    im, c, s = m.index_members.c, m.companies.c, m.research_snapshots.c
+    r = m.ingestion_runs.c
+    latest = select(s.company_id, func.max(s.id).label("sid")).group_by(s.company_id).subquery()
+    runs = (select(r.company_id, func.max(r.finished_at).label("last"))
+            .where((r.kind == "company") & r.status.in_(("ok", "partial"))).group_by(r.company_id).subquery())
+    return conn.execute(
+        select(im.symbol, im.source, im.as_of.label("listed_as_of"), c.id, c.name, c.industry, c.is_financial,
+               m.research_snapshots.c.id.label("snapshot_id"), m.research_snapshots.c.status, m.research_snapshots.c.as_of,
+               m.research_snapshots.c.dimensions, m.research_snapshots.c.flags, m.research_snapshots.c.output, runs.c.last)
+        .join(m.companies, c.id == im.company_id)
+        .outerjoin(latest, latest.c.company_id == c.id).outerjoin(m.research_snapshots, m.research_snapshots.c.id == latest.c.sid)
+        .outerjoin(runs, runs.c.company_id == c.id)
+        .where(im.segment == seg).order_by(im.symbol)).mappings().all()
+
+
+def segments_overview() -> dict:
+    from app.research.segments import SEGMENTS, ensure_segments
+
+    ensure_master()
+    ensure_segments()
+    out = []
+    with tx() as conn:
+        for key, spec in SEGMENTS.items():
+            im, c, s = m.index_members.c, m.companies.c, m.research_snapshots.c
+            latest = select(s.company_id, func.max(s.id).label("sid")).group_by(s.company_id).subquery()
+            rows = conn.execute(select(im.source, im.as_of, m.research_snapshots.c.status)
+                                .join(latest, latest.c.company_id == im.company_id, isouter=True)
+                                .join(m.research_snapshots, m.research_snapshots.c.id == latest.c.sid, isouter=True)
+                                .where(im.segment == key)).all()
+            statuses = [r[2] for r in rows if r[2]]
+            out.append({"key": key, "label": spec["label"], "index": spec["index"], "rank": spec["rank"], "count": len(rows),
+                        "source": rows[0][0] if rows else None, "list_as_of": _iso(max((r[1] for r in rows if r[1]), default=None)),
+                        "researched": len(statuses),
+                        "totals": {st: statuses.count(st) for st in ("ELIGIBLE_FOR_RESEARCH", "REVIEW_REQUIRED", "BLOCKED")}})
+    from app.research.ingest import job
+
+    return {"segments": out, "job": job.get(),
+            "note": "Together these three lists are the NIFTY 500 (SEBI size classes: top 100 large, 101-250 mid, 251-500 small)."}
+
+
+def segment_detail(seg: str) -> dict:
+    from app.research.segments import SEGMENTS, check_segment, ensure_segments
+
+    seg = check_segment(seg)
+    ensure_master()
+    ensure_segments()
+    with tx() as conn:
+        rows = _segment_rows(conn, seg)
+    items = []
+    for r in rows:
+        out = r["output"] or {}
+        metrics = out.get("metrics") or {}
+        flags = r["flags"] or []
+        items.append({
+            "symbol": r["symbol"], "name": r["name"], "industry": r["industry"], "is_financial": r["is_financial"],
+            "snapshot_id": r["snapshot_id"], "status": r["status"], "as_of": _iso(r["as_of"]), "last_refresh": _iso(r["last"]),
+            "price": (out.get("price") or {}).get("last"), "price_date": (out.get("price") or {}).get("date"),
+            "dimensions": r["dimensions"] or {},
+            "metrics": {k: {"value": (metrics.get(k) or {}).get("value"), "unit": (metrics.get(k) or {}).get("unit")} for k in SEGMENT_METRICS},
+            "flag_counts": {lvl: sum(1 for f in flags if f.get("level") == lvl) for lvl in ("blocker", "review", "watch")},
+        })
+    spec = SEGMENTS[seg]
+    statuses = [i["status"] for i in items if i["status"]]
+    from app.research.ingest import job
+
+    return {"key": seg, "label": spec["label"], "index": spec["index"], "rank": spec["rank"],
+            "source": rows[0]["source"] if rows else None, "list_as_of": _iso(rows[0]["listed_as_of"]) if rows else None,
+            "count": len(items), "researched": len(statuses),
+            "totals": {st: statuses.count(st) for st in ("ELIGIBLE_FOR_RESEARCH", "REVIEW_REQUIRED", "BLOCKED")},
+            "items": items, "job": job.get(), "metrics": list(SEGMENT_METRICS),
+            "note": "Free sources, fetched one company at a time. A company refreshed in the last 24 hours is skipped unless you force it."}
+
+
+def start_segment_fetch(seg: str, force: bool = False, refresh_list: bool = True, documents: bool = False) -> dict:
+    """Refresh the segment's constituent list, then ingest every member in the background."""
+    from app.research.ingest import job
+    from app.research.segments import SEGMENTS, check_segment, ensure_segments, members, refresh_lists
+
+    seg = check_segment(seg)
+    ensure_master()
+    ensure_segments()
+
+    def prepare() -> list[str]:
+        if refresh_list:
+            refresh_lists([seg])
+        with tx() as conn:
+            return members(conn, seg)
+
+    started = job.start(with_news=True, fetch_documents=documents, skip_fresh_hours=None if force else 24,
+                        label=f"{SEGMENTS[seg]['label']} ({SEGMENTS[seg]['index']})", segment=seg, prepare=prepare)
+    return {"started": started, "state": job.get(), **({} if started else {"reason": "Another fetch is already running — wait for it or stop it."})}

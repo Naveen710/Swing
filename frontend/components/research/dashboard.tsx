@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { fmtDate, fmtPrice, research } from "../../lib/research";
+import { SegmentButtons } from "./segments";
 import { DimShort, ResearchShell, Score, StateBox, StatusBadge, useIngestPoll, useLoad } from "./ui";
 
 export function ResearchDashboard() {
@@ -48,6 +49,7 @@ export function ResearchDashboard() {
       </>}
     >
       {msg && <p className="error-text">{msg}</p>}
+      <SegmentButtons />
       <StateBox loading={loading && !data} error={error} onRetry={reload}>
         {data && empty && (
           <section className="panel rs-onboard">

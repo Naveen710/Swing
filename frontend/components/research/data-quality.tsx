@@ -40,7 +40,7 @@ export function DataQualityConsole() {
             void upload(e, (f) => research.importDocument(f, sym.trim() || undefined), "PDF import");
           }} /><span className="muted rs-small">Text is extracted page by page so claims can cite the page.</span></label>
           <label className="rs-upload">Run verification checks (CSV)<input type="file" accept=".csv" onChange={(e) => void upload(e, research.verify, "Verification")} />
-            <span className="muted rs-small">Expected values you checked against the source. Template: backend/app/research/verification/real_cases_template.csv</span></label>
+            <span className="muted rs-small">Expected values you checked against the source. Blank templates per segment: <Link href="/research/segment/large">Large</Link> · <Link href="/research/segment/mid">Mid</Link> · <Link href="/research/segment/small">Small</Link> cap → “Verification template”.</span></label>
         </div>
         {msg && <p className="rs-small">{msg}</p>}
       </section>

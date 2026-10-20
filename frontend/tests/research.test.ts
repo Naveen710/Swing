@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { DIM_SHORT, STATUS_LABEL, evidenceHref, fmtCr, fmtMetric, fmtPrice } from "../lib/research";
+import { DIM_SHORT, SEGMENT_KEYS, STATUS_LABEL, evidenceHref, fmtCr, fmtMetric, fmtPrice, isSegment, jobProgress } from "../lib/research";
 
 test("fmtMetric formats each unit and never invents a value", () => {
   assert.equal(fmtMetric(null), "—");
@@ -28,4 +28,18 @@ test("evidence links encode the reference and carry the snapshot", () => {
 test("all seven dimensions and three statuses have labels", () => {
   assert.equal(Object.keys(DIM_SHORT).length, 7);
   assert.deepEqual(Object.keys(STATUS_LABEL).sort(), ["BLOCKED", "ELIGIBLE_FOR_RESEARCH", "REVIEW_REQUIRED"]);
+});
+
+test("segments: three keys, strict guard", () => {
+  assert.deepEqual(SEGMENT_KEYS, ["large", "mid", "small"]);
+  assert.ok(isSegment("mid") && !isSegment("micro") && !isSegment(null) && !isSegment("Large"));
+});
+
+test("jobProgress is a clamped percentage and null when the total is unknown", () => {
+  assert.equal(jobProgress(null), null);
+  assert.equal(jobProgress({ done: 3, total: 0 }), null);
+  assert.equal(jobProgress({ done: 0, total: 150 }), 0);
+  assert.equal(jobProgress({ done: 50, total: 150 }), 33);
+  assert.equal(jobProgress({ done: 260, total: 250 }), 100);
+  assert.equal(jobProgress({ total: 100 }), 0);
 });

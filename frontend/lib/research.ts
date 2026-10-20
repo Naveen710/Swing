@@ -108,7 +108,19 @@ export interface Decision { id: number; symbol: string; name: string; is_sample:
 export interface Run { id: number; kind: string; symbol: string | null; started_at: string; finished_at: string | null; status: string; detail: Record<string, unknown> }
 export interface Verification { case_id: string; symbol: string; kind: string; field: string; period: string; expected: number | null; actual: number | null; tolerance_pct: number; status: string; source_note: string | null; explanation: string | null; checked_at: string }
 export interface DataQuality { issues: Issue[]; counts: { kind: string; severity: string; count: number }[]; runs: Run[]; verification: Verification[]; source_errors: { id: number; source_key: string; provider: string; retrieved_at: string; error: string }[]; sources: { provider: string; payloads: number; last_retrieved: string }[] }
-export interface IngestState { running: boolean; stage: string; done?: number; total?: number; current?: string | null; results?: { symbol: string; status: string; error?: string }[]; error?: string; started_at?: string; finished_at?: string }
+export interface IngestState { running: boolean; stage: string; done?: number; total?: number; current?: string | null; results?: { symbol: string; status: string; error?: string }[]; error?: string; started_at?: string; finished_at?: string;
+  label?: string | null; segment?: SegmentKey | null; counts?: { ok: number; partial: number; error: number; fresh: number }; documents?: boolean }
+
+export type SegmentKey = "large" | "mid" | "small";
+export const SEGMENT_KEYS: SegmentKey[] = ["large", "mid", "small"];
+type StatusTotals = Record<Status, number>;
+export interface SegmentSummary { key: SegmentKey; label: string; index: string; rank: string; count: number; source: "niftyindices" | "bundled" | null; list_as_of: string | null; researched: number; totals: StatusTotals }
+export interface SegmentItem {
+  symbol: string; name: string; industry: string | null; is_financial: boolean; snapshot_id: number | null; status: Status | null; as_of: string | null;
+  last_refresh: string | null; price: number | null; price_date: string | null; dimensions: Record<string, number | null>;
+  metrics: Record<string, { value: number | null; unit: string }>; flag_counts: { blocker: number; review: number; watch: number };
+}
+export interface SegmentDetail extends SegmentSummary { items: SegmentItem[]; job: IngestState; metrics: string[]; note: string }
 
 /* ── calls ────────────────────────────────────────────────────────────── */
 
@@ -123,6 +135,11 @@ export const research = {
   prices: (s: string, days = 400) => get<{ bars: [string, number, number, number, number, number][]; actions: { date: string; action: string; value: number }[]; provider: string | null; adjustment: string }>(`/company/${encodeURIComponent(s)}/prices?days=${days}`),
   facts: (s: string) => get<{ facts: Record<string, string | number | boolean | null>[] }>(`/company/${encodeURIComponent(s)}/facts`),
   dossierMd: (s: string) => get<string>(`/company/${encodeURIComponent(s)}/dossier.md`),
+  segments: () => get<{ segments: SegmentSummary[]; job: IngestState; note: string }>("/segments"),
+  segment: (k: SegmentKey) => get<SegmentDetail>(`/segments/${k}`),
+  fetchSegment: (k: SegmentKey, o: { force?: boolean; refresh_list?: boolean; documents?: boolean } = {}) => post<{ started: boolean; state: IngestState; reason?: string }>(`/segments/${k}/fetch`, o),
+  segmentTemplate: (k: SegmentKey) => get<string>(`/segments/${k}/verification-template.csv`),
+  stopIngest: () => post<{ stopping: boolean; state: IngestState }>("/ingest/stop"),
   refresh: (s: string) => post<{ started: boolean; state: IngestState; reason?: string }>(`/company/${encodeURIComponent(s)}/refresh`),
   replay: (id: number) => post<{ reproducible: boolean | null; stored_hash?: string; replayed_hash?: string; reason?: string }>(`/snapshots/${id}/replay`),
   discovery: (p: { sort?: string; status?: string; sector?: string; include_sample?: boolean; min_confidence?: number }) => get<{ sort: string; items: QueueItem[]; totals: Record<string, number>; note: string }>(`/discovery${qs(p)}`),
@@ -183,6 +200,14 @@ export function fmtMetric(m: Pick<Metric, "value" | "unit"> | undefined | null):
 export const fmtCr = (v: number | null | undefined) => (v === null || v === undefined ? "—" : v.toLocaleString("en-IN", { maximumFractionDigits: 1 }));
 export const fmtDate = (s: string | null | undefined) => (s ? new Date(s.length <= 10 ? `${s}T00:00:00` : s).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—");
 export const fmtPrice = (v: number | null | undefined) => (v === null || v === undefined ? "—" : `₹${v.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`);
+
+export const isSegment = (k: string | null | undefined): k is SegmentKey => k === "large" || k === "mid" || k === "small";
+
+/* Progress of a background fetch, 0-100 (null when nothing is known yet). */
+export function jobProgress(j: Pick<IngestState, "done" | "total"> | null | undefined): number | null {
+  if (!j || !j.total) return null;
+  return Math.min(100, Math.round(((j.done ?? 0) / j.total) * 100));
+}
 
 export function evidenceHref(ref: string, snapshotId?: number): string {
   return `/research/evidence/${encodeURIComponent(ref)}${snapshotId ? `?snapshot=${snapshotId}` : ""}`;

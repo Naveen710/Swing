@@ -110,8 +110,42 @@ await step("settings", async () => {
   await page.waitForSelector("text=Data sources", { timeout: 10000 });
   await page.screenshot({ path: `${out}/14-settings.png`, fullPage: true });
 });
+await step("segment-buttons", async () => {
+  await page.goto(B + "/research");
+  await page.waitForSelector(".rs-seg--large .rs-seg-count:has-text('100')", { timeout: 15000 });
+  for (const [k, n] of [["mid", "150"], ["small", "250"]]) await page.waitForSelector(`.rs-seg--${k} .rs-seg-count:has-text('${n}')`);
+  await page.screenshot({ path: `${out}/15-segment-buttons.png` });
+});
+await step("segment-large-fetch", async () => {
+  await page.click(".rs-seg--large");
+  await page.waitForURL("**/research/segment/large", { timeout: 15000 });
+  await page.waitForSelector("text=Last fetch finished", { timeout: 120000 });        // job finished and page reloaded
+  await page.waitForFunction(() => document.querySelectorAll(".rs-seg-tbl tbody tr").length === 100, null, { timeout: 30000 });
+  await page.waitForFunction(() => [...document.querySelectorAll(".rs-stat")].some((e) => e.textContent?.startsWith("Researched100")), null, { timeout: 20000 });
+  await page.screenshot({ path: `${out}/16-segment-large.png`, fullPage: false });
+});
+await step("segment-sort-filter-template", async () => {
+  await page.click(".rs-sort:has-text('Company')");
+  const first = await page.textContent(".rs-seg-tbl tbody tr:first-child .stock-link");
+  if (first !== "ABB") throw new Error("sort by symbol gave " + first);
+  await page.fill(".rs-search", "infosys");
+  await page.waitForFunction(() => document.querySelectorAll(".rs-seg-tbl tbody tr").length === 1);
+  const [dl] = await Promise.all([page.waitForEvent("download"), page.click("button:has-text('Verification template')")]);
+  if (dl.suggestedFilename() !== "real_cases_large_cap.csv") throw new Error(dl.suggestedFilename());
+});
+await step("segment-tabs-small", async () => {
+  await page.click(".rs-tab:has-text('Small cap')");
+  await page.waitForURL("**/research/segment/small");
+  await page.waitForFunction(() => document.querySelectorAll(".rs-seg-tbl tbody tr").length === 250, null, { timeout: 30000 });
+  await page.click("button:has-text('Fetch latest data')");
+  await page.waitForSelector(".rs-progress", { timeout: 10000 });
+  await page.screenshot({ path: `${out}/17-segment-small-progress.png` });
+  await page.waitForSelector("text=Fetch latest data", { timeout: 120000 });
+  await page.waitForSelector("text=Last fetch finished", { timeout: 20000 });
+  await page.screenshot({ path: `${out}/18-segment-small-done.png` });
+});
 const phone = await b.newPage({ viewport: { width: 390, height: 844 } });
-for (const p of ["/research", "/research/company/SMPCABLE", "/research/discovery", "/research/journal", "/research/data"]) {
+for (const p of ["/research", "/research/company/SMPCABLE", "/research/discovery", "/research/journal", "/research/data", "/research/segment/mid"]) {
   await phone.goto(B + p);
   await phone.waitForTimeout(2500);
   const w = await phone.evaluate(() => document.documentElement.scrollWidth);

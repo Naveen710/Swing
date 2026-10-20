@@ -15,6 +15,7 @@ import math
 import re
 import threading
 from datetime import UTC, date, datetime, timedelta
+from typing import Callable
 
 from sqlalchemy import and_, func, select
 from sqlalchemy.engine import Connection
@@ -381,7 +382,8 @@ def ingest_news(providers: Providers | None = None) -> dict:
         raw = _raw_ids(conn, res, p.name, None)
         cands = conn.execute(select(m.companies.c.id, m.companies.c.name, m.securities.c.symbol)
                              .join(m.securities, m.securities.c.company_id == m.companies.c.id)
-                             .where(m.companies.c.deep_research.is_(True))).all()
+                             .where(m.companies.c.deep_research.is_(True) | m.companies.c.id.in_(select(m.index_members.c.company_id)))
+                             .where(m.securities.c.status == "active")).all()
         candidates = [(r.id, company_keys(r.name, r.symbol)) for r in cands]
         n = m.news_items.c
         new = dups = 0
@@ -454,8 +456,11 @@ def import_document(content: bytes, filename: str, symbol: str | None, title: st
 # ── batch job ────────────────────────────────────────────────────────────────
 
 class Job:
+    """One background ingestion batch at a time (the free hosting tier has one small worker)."""
+
     def __init__(self) -> None:
         self._lock = threading.Lock()
+        self._stop = threading.Event()
         self.state: dict = {"running": False, "stage": "idle"}
 
     def get(self) -> dict:
@@ -466,34 +471,76 @@ class Job:
         with self._lock:
             self.state = {**self.state, **kw}
 
-    def start(self, symbols: list[str], with_news: bool = True) -> bool:
+    def stop(self) -> bool:
+        if not self.get().get("running"):
+            return False
+        self._stop.set()
+        self._set(stage="stopping")
+        return True
+
+    def start(self, symbols: list[str] | None = None, with_news: bool = True, *, fetch_documents: bool = True,
+              skip_fresh_hours: float | None = None, label: str | None = None, segment: str | None = None,
+              prepare: Callable[[], list[str]] | None = None) -> bool:
+        """`prepare` (optional) runs first inside the worker thread and returns the symbols to ingest —
+        used to refresh an index list before fetching its companies."""
         with self._lock:
             if self.state.get("running"):
                 return False
-            self.state = {"running": True, "stage": "ingesting", "done": 0, "total": len(symbols), "started_at": now().isoformat(), "results": []}
-        threading.Thread(target=self._run, args=(symbols, with_news), daemon=True, name="research-ingest").start()
+            self._stop.clear()
+            self.state = {"running": True, "stage": "preparing" if prepare else "ingesting", "done": 0, "total": len(symbols or []),
+                          "started_at": now().isoformat(), "results": [], "label": label, "segment": segment,
+                          "counts": {"ok": 0, "partial": 0, "error": 0, "fresh": 0}, "documents": fetch_documents}
+        threading.Thread(target=self._run, args=(symbols or [], with_news, fetch_documents, skip_fresh_hours, prepare),
+                         daemon=True, name="research-ingest").start()
         return True
 
-    def _run(self, symbols: list[str], with_news: bool) -> None:
+    @staticmethod
+    def _recently_refreshed(symbol: str, hours: float) -> bool:
+        r = m.ingestion_runs.c
+        with tx() as conn:
+            comp = _company(conn, symbol)
+            if comp is None:
+                return False
+            last = conn.execute(select(func.max(r.finished_at)).where((r.company_id == comp["id"]) & (r.kind == "company")
+                                                                       & r.status.in_(("ok", "partial")))).scalar()
+        if last is None:
+            return False
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=UTC)
+        return now() - last < timedelta(hours=hours)
+
+    def _run(self, symbols: list[str], with_news: bool, fetch_documents: bool, skip_fresh_hours: float | None, prepare) -> None:
         from app.research.engine import build_snapshot
 
-        providers = Providers()
-        results = []
+        results: list[dict] = []
+        counts = {"ok": 0, "partial": 0, "error": 0, "fresh": 0}
         try:
+            if prepare:
+                symbols = prepare()
+                self._set(stage="ingesting", total=len(symbols))
+            providers = Providers()
             for i, sym in enumerate(symbols, start=1):
+                if self._stop.is_set():
+                    break
                 self._set(current=sym)
                 try:
-                    r = ingest_company(sym, providers)
-                    snap = build_snapshot(sym)
-                    results.append({"symbol": sym, "status": r["status"], "snapshot": snap.get("snapshot_id")})
+                    if skip_fresh_hours and self._recently_refreshed(sym, skip_fresh_hours):
+                        res = {"symbol": sym, "status": "fresh"}
+                    else:
+                        r = ingest_company(sym, providers, fetch_documents=fetch_documents)
+                        snap = build_snapshot(sym)
+                        res = {"symbol": sym, "status": r["status"], "snapshot": snap.get("snapshot_id")}
                 except Exception as exc:  # noqa: BLE001
                     logger.exception("Research batch failed for %s", sym)
-                    results.append({"symbol": sym, "status": "error", "error": str(exc)[:200]})
-                self._set(done=i, results=results[-50:])
-            if with_news:
+                    res = {"symbol": sym, "status": "error", "error": str(exc)[:200]}
+                counts[res["status"] if res["status"] in counts else "error"] += 1
+                results.append(res)
+                self._set(done=i, results=results[-50:], counts=dict(counts))
+            stopped = self._stop.is_set()
+            if with_news and not stopped:
                 self._set(stage="news", current=None)
                 results.append({"symbol": "news", **ingest_news(providers)})
-            self._set(running=False, stage="done", finished_at=now().isoformat(), results=results[-60:])
+            self._set(running=False, stage="stopped" if stopped else "done", current=None, finished_at=now().isoformat(), results=results[-60:])
         except Exception as exc:  # noqa: BLE001
             logger.exception("Research batch crashed")
             self._set(running=False, stage="error", error=str(exc), finished_at=now().isoformat())

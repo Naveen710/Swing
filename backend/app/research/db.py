@@ -54,9 +54,14 @@ def _m2_fts(conn: Connection, dialect: str) -> None:
         conn.execute(text(s))
 
 
+def _m3_index_members(conn: Connection, dialect: str) -> None:
+    m.index_members.create(conn, checkfirst=True)
+
+
 MIGRATIONS = [
     (1, "base research tables", _m1_base),
     (2, "full-text search (SQLite FTS5)", _m2_fts),
+    (3, "market-cap segment membership", _m3_index_members),
 ]
 
 

@@ -24,7 +24,21 @@ Source spec: `Claude_Code_Instructions_Indian_Stock_Research_Platform.docx` (two
 - **Postgres search** uses `ILIKE`, not FTS5 (FTS5 is SQLite-only). Ranking is simpler there.
 - **Sample companies are fictional** (`SMP…`) so the whole workflow is testable offline; the 31 sample
   verification cases are therefore partly circular. Real-company verification uses
-  `verification/real_cases_template.csv`, which must be filled in by hand from annual reports.
+  the per-segment templates `verification/real_cases_{large,mid,small}_cap.csv`, filled in by hand from annual reports.
+
+## Market-cap segments (added after Stretch Two)
+- `segments.py`: Large = NIFTY 100, Mid = NIFTY Midcap 150, Small = NIFTY Smallcap 250 (= NIFTY 500). Lists are
+  downloaded from niftyindices.com and archived; on failure the bundled `backend/data` lists are used and a
+  `fetch_error` issue `index.<segment>` is logged (auto-resolved by the next successful download). Bundled mid cap =
+  NIFTY 500 − NIFTY 100 − Smallcap 250. NSE placeholder symbols (`DUMMY…`) are dropped.
+- Table `rs_index_members` (migration 3). Endpoints: `GET /segments`, `GET /segments/{seg}`,
+  `POST /segments/{seg}/fetch` (`force`, `refresh_list`, `documents`), `GET /segments/{seg}/verification-template.csv`,
+  `POST /ingest/stop`. `/companies?segment=` filter.
+- The batch job skips companies refreshed in the last 24 h, can be stopped, reports ok/partial/error/fresh counts and
+  does not download PDFs for whole segments. News is now matched against segment members as well as the deep set.
+- Interpretation note: the request said "Nifty 500 for large, Midcap 500, Smallcap 500". NSE has no Midcap 500 or
+  Smallcap 500 index, so the standard split of the NIFTY 500 was used. Adding NIFTY Microcap 250 to small cap (to reach
+  500 small-cap names) is a small change in `segments.py`: a second list file merged into the small segment.
 
 ## Known limitations
 - Live ingestion (NSE, Yahoo, news sites) could not be exercised from the build sandbox — those hosts were

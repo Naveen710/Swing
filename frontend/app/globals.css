@@ -809,3 +809,44 @@ a.rs-feed-text:hover { color:var(--accent); }
 .rs-upload input { max-width:100%; }
 .rs-upload span { overflow-wrap:anywhere; }
 .rs-grid-2 > .panel, .rs-grid-2 > .panel + .panel { margin:0; }
+
+/* ── Market-cap segment buttons + segment page ─────────────────────── */
+.rs-seg-wrap { margin-bottom:18px; }
+.rs-seg-row { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+.rs-seg { --seg:var(--accent); --seg-rgb:var(--accent-rgb); font:inherit; color:var(--text); text-align:left; cursor:pointer; display:grid; gap:6px;
+  background:var(--surface); border:1px solid var(--line); border-top:4px solid var(--seg); border-radius:var(--radius); padding:14px 16px 12px;
+  box-shadow:var(--shadow); transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease; min-width:0; }
+.rs-seg--mid { --seg:var(--marigold); --seg-rgb:var(--warn-rgb); }
+.rs-seg--small { --seg:var(--green); --seg-rgb:var(--green-rgb); }
+.rs-seg:hover:not(:disabled) { transform:translateY(-2px); border-color:rgba(var(--seg-rgb),0.45); box-shadow:0 2px 4px rgba(var(--ink-rgb),0.06), 0 12px 28px rgba(var(--seg-rgb),0.16); }
+.rs-seg:focus-visible { outline:3px solid rgba(var(--seg-rgb),0.45); outline-offset:2px; }
+.rs-seg:disabled { cursor:progress; opacity:.8; }
+.rs-seg-top { display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+.rs-seg-label { font-family:var(--font-display),sans-serif; font-size:1.35rem; font-weight:700; letter-spacing:-0.01em; }
+.rs-seg-count { font-family:var(--font-display),sans-serif; font-size:1.35rem; font-weight:600; color:var(--seg); font-variant-numeric:tabular-nums; }
+.rs-seg-index { font-weight:600; font-size:0.86rem; }
+.rs-seg-rank { font-size:0.78rem; color:var(--muted); min-height:1.2em; }
+.rs-seg-bar { height:6px; border-radius:6px; background:var(--bg-deep); overflow:hidden; margin-top:4px; }
+.rs-seg-bar span { display:block; height:100%; background:var(--seg); border-radius:6px; transition:width .4s ease; }
+.rs-seg-foot { display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; font-size:0.78rem; color:var(--muted); }
+.rs-seg-cta { color:var(--seg); font-weight:600; }
+.rs-seg--mid .rs-seg-cta, .rs-seg--mid .rs-seg-count { color:var(--warn-ink); }
+.rs-seg-note { margin:8px 2px 0; }
+.rs-progress { border-left:4px solid var(--accent); margin-bottom:14px; }
+.rs-progress--other { border-left-color:var(--marigold); }
+.rs-progress-head { display:flex; justify-content:space-between; gap:12px; margin-bottom:8px; }
+.rs-progress-bar { height:8px; border-radius:8px; background:var(--bg-deep); overflow:hidden; }
+.rs-progress-bar span { display:block; height:100%; background:var(--accent-grad); transition:width .5s ease; }
+.rs-progress p { margin:8px 0 0; }
+.rs-of { font-size:0.9rem; color:var(--faint); font-weight:500; }
+.rs-stat-text { font-size:1.1rem !important; }
+.rs-sort { font:inherit; font-weight:inherit; color:inherit; background:none; border:0; padding:0; cursor:pointer; white-space:nowrap; }
+.rs-sort:hover { color:var(--accent); }
+.rs-seg-tbl td { white-space:nowrap; }
+.rs-seg-tbl td:first-child { white-space:normal; min-width:180px; }
+.rs-seg-name { max-width:260px; }
+@media (max-width:760px) {
+  .rs-seg-row { grid-template-columns:1fr; }
+  .rs-seg { grid-template-columns:1fr auto; align-items:center; }
+  .rs-seg-top, .rs-seg-index, .rs-seg-rank, .rs-seg-bar, .rs-seg-foot { grid-column:1 / -1; }
+}

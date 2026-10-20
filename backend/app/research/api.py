@@ -77,10 +77,32 @@ def dashboard():
 
 @router.get("/companies")
 def companies(q: str | None = Query(default=None, max_length=80), sector: str | None = None, scope: str = "all", status: str | None = None,
-              coverage: str | None = None, limit: int = Query(default=50, ge=1, le=200), offset: int = Query(default=0, ge=0)):
+              coverage: str | None = None, limit: int = Query(default=50, ge=1, le=200), offset: int = Query(default=0, ge=0),
+              segment: str | None = Query(default=None, pattern="^(large|mid|small)$")):
     if scope not in ("all", "deep", "sample", "researched"):
         raise HTTPException(status_code=400, detail="scope must be all, deep, sample or researched")
-    return service.search_companies(q, sector, scope, status, coverage, limit, offset)
+    return service.search_companies(q, sector, scope, status, coverage, limit, offset, segment)
+
+
+# ── market-cap segments (Large = NIFTY 100, Mid = Midcap 150, Small = Smallcap 250) ──
+
+@router.get("/segments")
+def segments():
+    return service.segments_overview()
+
+
+@router.get("/segments/{segment}")
+def segment(segment: str):
+    return _404(service.segment_detail, segment)
+
+
+@router.get("/segments/{segment}/verification-template.csv")
+def segment_template(segment: str):
+    from app.research.segments import template_for
+
+    body = _404(template_for, segment)
+    return Response(content=body, media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="real_cases_{segment}_cap.csv"'})
 
 
 @router.get("/sectors")
@@ -220,6 +242,25 @@ def ingest(body: IngestBody):
         raise HTTPException(status_code=400, detail="Give symbols or set deep=true")
     started = job.start(symbols, with_news=body.news)
     return {"started": started, "state": job.get(), **({} if started else {"reason": "An ingestion job is already running."})}
+
+
+class SegmentFetchBody(BaseModel):
+    force: bool = False            # re-fetch companies refreshed in the last 24 hours too
+    refresh_list: bool = True      # download the current constituent list first
+    documents: bool = False        # also download filing PDFs (slow; off for whole segments)
+
+
+@router.post("/segments/{segment}/fetch")
+def segment_fetch(segment: str, body: SegmentFetchBody | None = None):
+    b = body or SegmentFetchBody()
+    return _404(service.start_segment_fetch, segment, b.force, b.refresh_list, b.documents)
+
+
+@router.post("/ingest/stop")
+def ingest_stop():
+    from app.research.ingest import job
+
+    return {"stopping": job.stop(), "state": job.get()}
 
 
 @router.post("/seed-samples")

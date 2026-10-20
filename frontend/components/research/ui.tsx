@@ -9,6 +9,7 @@ import { AppNav } from "../app-nav";
 
 const SECTIONS = [
   { href: "/research", label: "Dashboard" },
+  { href: "/research/segment/large", label: "Large · Mid · Small" },
   { href: "/research/companies", label: "Companies" },
   { href: "/research/discovery", label: "Discovery queue" },
   { href: "/research/news", label: "News & filings" },
@@ -82,7 +83,9 @@ export function ResearchShell({ title, intro, actions, children, sample }: { tit
       <AppNav />
       <nav className="rs-subnav" aria-label="Research sections">
         {SECTIONS.map((s) => {
-          const on = s.href === "/research" ? path === "/research" : path?.startsWith(s.href) || (s.href === "/research/companies" && path?.startsWith("/research/company/"));
+          const on = s.href === "/research" ? path === "/research"
+            : s.href.startsWith("/research/segment/") ? Boolean(path?.startsWith("/research/segment/"))
+            : path?.startsWith(s.href) || (s.href === "/research/companies" && path?.startsWith("/research/company/"));
           return <Link key={s.href} href={s.href} className={`rs-subnav-link ${on ? "rs-subnav-link--on" : ""}`} aria-current={on ? "page" : undefined}>{s.label}</Link>;
         })}
       </nav>
